@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import optimistix
 from emu_example import clr_func
 
-def TCA_OpenFLux(parameters, fixed):
+def TCA_OpenFLux(parameters, fixed) -> dict:
     v1, v16, v17, v18, v19, v20 = fixed
     # v8, v19, v20, v16, v17, v18, v2, v9 = parameters
     v8, v2, v9 = parameters
@@ -171,21 +171,17 @@ def TCA_OpenFLux(parameters, fixed):
     lysx_123456 = jnp.convolve(oaa_1234, pyr_23)
     valx_12345 = jnp.convolve(pyr_123, pyr_23)
     aspx_1234 = oaa_1234
-
-    return (lysx_123456, valx_12345, aspx_1234, suc_1234)
-
-
-    # return {"lysx_123456": lysx_123456, "valx_12345": valx_12345, "aspx_1234": aspx_1234, "suc_1234": suc_1234}
+    return {"lysx_123456": lysx_123456, "valx_12345": valx_12345, "aspx_1234": aspx_1234, "suc_1234": suc_1234}
 
 def objective_wssr(params, args):
     data_obs, D_list, fixed = args
     outputs = TCA_OpenFLux(params, fixed)
-
-    total = 0.0
-    for est, obs, D in zip(outputs, data_obs, D_list):
-        r = est - obs
-        total += r.T @ jnp.linalg.inv(D) @ r
-
+    residuals = jax.tree.map(lambda e, o: e - o, outputs, data_obs)
+    total = sum(
+        r.T @ jnp.linalg.inv(D) @ r
+        for r, D in zip(jax.tree.leaves(residuals),
+                        jax.tree.leaves(D_list))
+    )
     return total
 
 def objective_clr_wssr(params, args):
@@ -195,9 +191,10 @@ def objective_clr_wssr(params, args):
         lambda x: clr_func(x),
         outputs
     )
-    total = 0.0
-    for est, obs, D in zip(outputs_clr, data_obs, D_list):
-        r = est - obs
-        total += r.T @ jnp.linalg.inv(D) @ r
-
+    residuals = jax.tree.map(lambda e, o: e - o, outputs_clr, data_obs)
+    total = sum(
+        r.T @ jnp.linalg.inv(D) @ r
+        for r, D in zip(jax.tree.leaves(residuals),
+                        jax.tree.leaves(D_list))
+    )
     return total
