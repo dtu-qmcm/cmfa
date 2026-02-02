@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import optimistix
 from emu_example import clr_func
 
-def TCA_OpenFLux(parameters, fixed) -> dict:
+def free_parameters(parameters, fixed):
     v1, v16, v17, v18, v19, v20 = fixed
     # v8, v19, v20, v16, v17, v18, v2, v9 = parameters
     v8, v2, v9 = parameters
@@ -29,9 +29,14 @@ def TCA_OpenFLux(parameters, fixed) -> dict:
     i_M = jnp.column_stack((jnp.array([1]),M_rev))
     # Columns correspond to: v8, v1, v19, v20, v16, v17, v18, v2, v9
     NS = jnp.array(jnp.vstack((jnp.identity(9), z_M, i_M)))
+    out = NS @ v_free
+    return out
     
-    v8,v1,v19, v20,v16, v17, v18,v2, v9,v3, v4, v5, v6, v11, v12, v13, v14, v15, v10, v7 = NS.dot(v_free)
 
+def TCA_OpenFLux(parameters, fixed) -> dict:
+    # NS = free_parameters(parameters=parameters, fixed=fixed)
+    
+    v8,v1,v19, v20,v16, v17, v18,v2, v9,v3, v4, v5, v6, v11, v12, v13, v14, v15, v10, v7 = free_parameters(parameters=parameters, fixed=fixed)
     A1 = jnp.array([
     [-v3-v5-v6-v9-v19-v20, v3+v19+v20, v6, v9, 0, v5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, -v1-v9, 0, 0, 0, v9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

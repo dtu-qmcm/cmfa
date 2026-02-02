@@ -5,6 +5,9 @@ import jax.scipy as jsp
 
 from scipy.spatial.distance import euclidean
 
+from scipy import stats
+import optimistix
+
 from jax import config
 config.update("jax_enable_x64", True)
 
@@ -179,3 +182,24 @@ def objective_clr_wssr(params, args):
     residuals = jnp.array(clr_func(data_est) - data_obs)
     out = 1/2*(residuals.T @ jnp.linalg.solve(D, residuals))
     return out
+
+def calc_ci(opti_solution, confidence_level=0.95) -> dict:
+    hess_inv = opti_solution.state.f_info.hessian_inv.pytree
+    cov_matrix = jnp.asarray(hess_inv)
+    standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
+    # Parameters from your optimization
+    params = jnp.asarray(opti_solution.value)
+    alpha = 1 - confidence_level
+
+    # Critical value (Z-score for 95%)
+    z = stats.norm.ppf(1 - alpha / 2)
+
+    # Calculate bounds
+    lower_bounds = params - z * standard_errors
+    upper_bounds = params + z * standard_errors
+
+    ci_range = jnp.stack([lower_bounds, upper_bounds], axis=1)
+    return {"params": params,
+            "standard_errors": standard_errors,
+            "ci_bounds": ci_range,
+            }
