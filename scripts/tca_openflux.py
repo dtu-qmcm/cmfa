@@ -2,11 +2,21 @@ import jax
 import jax.numpy as jnp
 import optimistix
 from emu_example import clr_func
+from scipy import stats
 
-def free_parameters(parameters, fixed):
-    v1, v16, v17, v18, v19, v20 = fixed
-    # v8, v19, v20, v16, v17, v18, v2, v9 = parameters
-    v8, v2, v9 = parameters
+def flux_vector(parameters: dict, fixed: dict):
+    # parameters = {'v8': ..., 'v2': ..., 'v9': ...}
+    # fixed = {'v1': ..., 'v16': ..., 'v17': ..., ...}
+    v1 = fixed['v1']
+    v16 = fixed['v16']
+    v17 = fixed['v17']
+    v18 = fixed['v18']
+    v19 = fixed['v19']
+    v20 = fixed['v20']
+    
+    v8 = parameters['v8']
+    v2 = parameters['v2']
+    v9 = parameters['v9']
 
     v_free = jnp.array([v8,v1,v19,v20,v16, v17, v18,v2, v9])
     M_irr = jnp.array([    
@@ -29,16 +39,19 @@ def free_parameters(parameters, fixed):
     i_M = jnp.column_stack((jnp.array([1]),M_rev))
     # Columns correspond to: v8, v1, v19, v20, v16, v17, v18, v2, v9
     NS = jnp.array(jnp.vstack((jnp.identity(9), z_M, i_M)))
-    out = NS @ v_free
+    order_values = NS @ v_free
+    order_keys = ["v8", "v1", "v19", "v20", "v16", "v17", "v18", "v2", "v9", "v3","v4", "v5", "v6", "v11", "v12", "v13", "v14", "v15", "v10", "v7"]
+    out = dict(zip(order_keys, order_values))
     return out
-    
 
-def TCA_OpenFLux(parameters, fixed) -> dict:
-    # NS = free_parameters(parameters=parameters, fixed=fixed)
+def TCA_OpenFLux(parameters: dict, fixed: dict) -> dict:
+    v = flux_vector(parameters=parameters, fixed=fixed)
+    names = ['v1', 'v2', 'v3', 'v4', 'v5', 'v6', 'v7', 'v8', 'v9', 'v10', 
+             'v11', 'v12', 'v13', 'v14', 'v15', 'v16', 'v17', 'v18', 'v19', 'v20']
+    v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20 = [v[n] for n in names]
     
-    v8,v1,v19, v20,v16, v17, v18,v2, v9,v3, v4, v5, v6, v11, v12, v13, v14, v15, v10, v7 = free_parameters(parameters=parameters, fixed=fixed)
     A1 = jnp.array([
-    [-v3-v5-v6-v9-v19-v20, v3+v19+v20, v6, v9, 0, v5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [-v["v3"]-v5-v6-v9-v19-v20, v3+v19+v20, v6, v9, 0, v5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, -v1-v9, 0, 0, 0, v9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, -v2-v5, 0, 0, 0, 0, 0, 0, 0, 0, 0, v5, 0, 0, 0, 0],
     [v10, 0, 0, -v7-v10, 0, 0, v7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -178,7 +191,7 @@ def TCA_OpenFLux(parameters, fixed) -> dict:
     aspx_1234 = oaa_1234
     return {"lysx_123456": lysx_123456, "valx_12345": valx_12345, "aspx_1234": aspx_1234, "suc_1234": suc_1234}
 
-def objective_wssr(params, args):
+def objective_wssr(params: dict, args):
     data_obs, D_list, fixed = args
     outputs = TCA_OpenFLux(params, fixed)
     residuals = jax.tree.map(lambda e, o: e - o, outputs, data_obs)
@@ -189,7 +202,7 @@ def objective_wssr(params, args):
     )
     return total
 
-def objective_clr_wssr(params, args):
+def objective_clr_wssr(params: dict, args):
     data_obs, D_list, fixed = args
     outputs = TCA_OpenFLux(params, fixed)
     outputs_clr = jax.tree.map(
@@ -203,3 +216,28 @@ def objective_clr_wssr(params, args):
                         jax.tree.leaves(D_list))
     )
     return total
+
+def calc_ci(opti_solution, confidence_level=0.95) -> dict:
+    hess_inv_dict = opti_solution.state.f_info.hessian_inv.pytree
+    standard_errors = {
+        k: jnp.sqrt(hess_inv_dict[k][k]) 
+        for k in hess_inv_dict.keys()
+    }
+
+    # Parameters from your optimization
+    params = opti_solution.value
+    alpha = 1 - confidence_level
+    # Critical value (Z-score for 95%)
+    z = stats.norm.ppf(1 - alpha / 2)
+    ci_results = {}
+    for k in params.keys():
+        se = standard_errors[k]
+        val = params[k]
+        
+        ci_results[k] = {
+            "mean": val,
+            "std_error": se,
+            "lower": val - z * se,
+            "upper": val + z * se
+        }
+    return ci_results

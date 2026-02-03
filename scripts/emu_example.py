@@ -129,7 +129,6 @@ def clr_inv_func(mat_com):
 # closure, _gram_schmidt_basis, _check_orthonality and ilr_func are from skbio.stats.composition and modified to work with jax and otimistix. 
 def closure(mat):
     mat2d = jnp.atleast_2d(mat)
-    print()
     mat_sum = jnp.sum(mat2d, axis=1, keepdims=True)
     mat = mat2d / mat_sum
     return jnp.squeeze(mat)
