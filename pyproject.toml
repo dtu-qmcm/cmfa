@@ -9,11 +9,15 @@ dependencies = [
     "ipykernel",
     "jax>=0.4.0,<0.9.0",
     "matplotlib",
+    "nbformat>=5.10.4",
     "numpy",
     "optimistix",
+    "plotly>=6.5.2",
     "polars",
     "scikit-bio",
     "scipy",
+    "seaborn>=0.13.2",
+    "ternary-diagram>=3.2.1",
 ]
 
 [build-system]
