@@ -172,14 +172,14 @@ def objective_wssr(params, args):
     data_obs, D, v1 = args
     data_est = simple_net(params, v1)
     residuals = jnp.array(data_est) - jnp.array(data_obs)
-    out = 1/2*(residuals.T @ jnp.linalg.solve(D, residuals))
+    out = (residuals.T @ jnp.linalg.solve(D, residuals))
     return out
 
 def objective_clr_wssr(params, args):
     data_obs, D, v1 = args
     data_est = simple_net(parameters=params, v1=v1)
     residuals = jnp.array(clr_func(data_est) - data_obs)
-    out = 1/2*(residuals.T @ jnp.linalg.solve(D, residuals))
+    out = (residuals.T @ jnp.linalg.solve(D, residuals))
     return out
 
 def calc_ci(opti_solution, confidence_level=0.95) -> dict:
