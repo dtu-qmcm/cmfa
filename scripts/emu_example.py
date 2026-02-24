@@ -168,19 +168,50 @@ def aitchison(x, y):
     return euclidean(clr_func(x), clr_func(y))
 
 
+# def objective_wssr(params, args):
+#     if jnp.any(params < 0):
+#         out = 1e5
+#     else:
+#         data_obs, D, v1 = args
+#         data_est = simple_net(params, v1)
+#         residuals = jnp.array(data_est) - jnp.array(data_obs)
+#         out = (residuals.T @ jnp.linalg.solve(D, residuals))
+#     return out 
+
 def objective_wssr(params, args):
     data_obs, D, v1 = args
-    data_est = simple_net(params, v1)
-    residuals = jnp.array(data_est) - jnp.array(data_obs)
-    out = (residuals.T @ jnp.linalg.solve(D, residuals))
-    return out
+
+    def penalty(_):
+        return 1e5
+
+    def compute(_):
+        data_est = simple_net(params, v1)
+        residuals = data_est - data_obs
+        return residuals.T @ jnp.linalg.solve(D, residuals)
+
+    return jax.lax.cond(
+        jnp.any(params < 0),
+        penalty,
+        compute,
+        operand=None
+    )
 
 def objective_clr_wssr(params, args):
     data_obs, D, v1 = args
-    data_est = simple_net(parameters=params, v1=v1)
-    residuals = jnp.array(clr_func(data_est) - data_obs)
-    out = (residuals.T @ jnp.linalg.solve(D, residuals))
-    return out
+    def penalty(_):
+        return 1e5
+    
+    def compute(_):
+        data_est = simple_net(parameters=params, v1=v1)
+        residuals = jnp.array(clr_func(data_est) - data_obs)
+        return (residuals.T @ jnp.linalg.solve(D, residuals))
+    
+    return jax.lax.cond(
+        jnp.any(params < 0),
+        penalty,
+        compute,
+        operand=None
+    )
 
 def calc_ci(opti_solution, confidence_level=0.95) -> dict:
     hess_inv = opti_solution.state.f_info.hessian_inv.pytree
