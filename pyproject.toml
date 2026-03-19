@@ -19,6 +19,7 @@ dependencies = [
     "scipy",
     "seaborn>=0.13.2",
     "ternary-diagram>=3.2.1",
+    "tqdm>=4.67.3",
 ]
 
 [build-system]
