@@ -8,7 +8,7 @@ import optimistix
 from skbio.stats.composition import closure
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, simple_net
+from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func
 
 jax.config.update("jax_enable_x64", True)
 
@@ -70,6 +70,14 @@ def loss_clr(log_free_flux, args):
     return wssr(clr_func(composition), (clr_func(target), weights)), composition
 
 
+def loss_ilr(log_free_flux, args):
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
+    target, weights = args
+    return wssr(
+        ordered_ilr_func(composition), (ordered_ilr_func(target), weights)
+    ), composition
+
+
 def main():
     flux_from_free = partial(
         get_flux_vector,
@@ -102,14 +110,19 @@ def main():
     composition_measurements = closure(intensity_measurements)
     composition_sd = np.std(composition_measurements, axis=0)  # type: ignore
     clr_composition_sd = np.std(clr_func(composition_measurements), axis=0)
+    ilr_composition_sd = np.std(
+        ordered_ilr_func(composition_measurements), axis=0
+    )
     print(f"Standard deviation of simulated compositions:\n\t{composition_sd}")
     print(
         f"Standard deviation of clr transformed simulated compositions:\n\t{clr_composition_sd}"
     )
     estimated_fluxes_euclidean = []
     estimated_fluxes_clr = []
+    estimated_fluxes_ilr = []
     estimated_ids_euclidean = []
     estimated_ids_clr = []
+    estimated_ids_ilr = []
     for mst in tqdm(composition_measurements):
         result_euclidean = optimistix.minimise(
             loss_euclidean,
@@ -129,21 +142,36 @@ def main():
             throw=False,
             has_aux=True,
         )
+        result_ilr = optimistix.minimise(
+            loss_ilr,
+            y0=jnp.log(INITIAL_GUESS),
+            args=(mst, 1 / ilr_composition_sd),
+            solver=solver,
+            max_steps=10000,
+            throw=False,
+            has_aux=True,
+        )
         estimated_fluxes_euclidean.append(
             flux_from_free(jnp.exp(result_euclidean.value))
         )
-        estimated_fluxes_clr.append(flux_from_free(jnp.exp(result_clr.value)))
         estimated_ids_euclidean.append(result_euclidean.aux)
+        estimated_fluxes_clr.append(flux_from_free(jnp.exp(result_clr.value)))
         estimated_ids_clr.append(result_clr.aux)
+        estimated_fluxes_ilr.append(flux_from_free(jnp.exp(result_ilr.value)))
+        estimated_ids_ilr.append(result_ilr.aux)
     estimated_fluxes_euclidean = jnp.array(estimated_fluxes_euclidean)
-    estimated_fluxes_clr = jnp.array(estimated_fluxes_clr)
     estimated_ids_euclidean = jnp.array(estimated_ids_euclidean)
+    estimated_fluxes_clr = jnp.array(estimated_fluxes_clr)
     estimated_ids_clr = jnp.array(estimated_ids_clr)
+    estimated_fluxes_ilr = jnp.array(estimated_fluxes_ilr)
+    estimated_ids_ilr = jnp.array(estimated_ids_ilr)
     for filename, arr in (
         ("estimated_fluxes_euclidean.npy", estimated_fluxes_euclidean),
+        ("estimated_ids_euclidean.npy", estimated_ids_euclidean),
         ("estimated_fluxes_clr.npy", estimated_fluxes_clr),
         ("estimated_ids_clr.npy", estimated_ids_clr),
-        ("estimated_ids_euclidean.npy", estimated_ids_euclidean),
+        ("estimated_fluxes_ilr.npy", estimated_fluxes_ilr),
+        ("estimated_ids_ilr.npy", estimated_ids_ilr),
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")
