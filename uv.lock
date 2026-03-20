@@ -452,6 +452,7 @@ dependencies = [
     { name = "optimistix", version = "0.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "plotly" },
     { name = "polars" },
+    { name = "python-ternary" },
     { name = "scikit-bio" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
@@ -472,6 +473,7 @@ requires-dist = [
     { name = "optimistix" },
     { name = "plotly", specifier = ">=6.5.2" },
     { name = "polars" },
+    { name = "python-ternary", specifier = ">=1.0.8" },
     { name = "scikit-bio" },
     { name = "scipy" },
     { name = "seaborn", specifier = ">=0.13.2" },
@@ -2844,6 +2846,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/5f/32ae50a5464314e5e2b6d10cac439d94fabe882963a2eca57bd965694f9a/python_libsbml-5.21.1-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b56f1d0a20b8768f7318043019a02d6582ef58a355521bef32c9f28f4c1d8619", size = 8039270, upload-time = "2026-03-09T13:13:35.561Z" },
     { url = "https://files.pythonhosted.org/packages/21/52/5960736a6e89449a119fb6cb17675356ae81ce5b0ac94eac92408944c811/python_libsbml-5.21.1-cp314-cp314-win_amd64.whl", hash = "sha256:7b2f0618889d0995630602ca23407ff9fa879fc78c5e119d04164d0d6f65df77", size = 6080260, upload-time = "2026-03-09T13:13:37.205Z" },
     { url = "https://files.pythonhosted.org/packages/e7/05/76eb10a1436e3c4b11ddab53ebbc94474047a1e9c96f424d01c299fe8a31/python_libsbml-5.21.1-cp314-cp314-win_arm64.whl", hash = "sha256:4bd70514282d48502c52b95eb2e31f99ed0f8732f3eb9a733d7f0fcfffe70f47", size = 5780207, upload-time = "2026-03-09T13:13:38.7Z" },
+]
+
+[[package]]
+name = "python-ternary"
+version = "1.0.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/37/fd1861f29024c0f6a4b50118ecf6f1a152f34f2403551a55b4ca4d532a18/python-ternary-1.0.8.tar.gz", hash = "sha256:41e7313db74ab2e24280797ed8073eccad4006429dfd87f6e66e7feba2aa64cd", size = 7579244, upload-time = "2021-02-17T18:39:31.862Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/28/80/d13b4d626fd2ea59fc8f3d771ca132f30b60ef0f51cb4f81b35e370ab7e3/python_ternary-1.0.8-py3-none-any.whl", hash = "sha256:80241526ee521e29bb7291fdb239c8cdf99c0e6d6471f4c67f36d5fbbfdd0485", size = 18412, upload-time = "2021-02-17T18:38:15.593Z" },
 ]
 
 [[package]]

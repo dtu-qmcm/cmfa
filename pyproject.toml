@@ -15,6 +15,7 @@ dependencies = [
     "optimistix",
     "plotly>=6.5.2",
     "polars",
+    "python-ternary>=1.0.8",
     "scikit-bio",
     "scipy",
     "seaborn>=0.13.2",
