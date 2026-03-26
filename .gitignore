@@ -204,7 +204,7 @@ cython_debug/
 .cursorindexingignore
 
 .DS_Store
-
+agent.md
 # Marimo
 marimo/_static/
 marimo/_lsp/
