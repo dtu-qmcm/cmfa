@@ -19,6 +19,7 @@ uv run jupyter execute notebooks/metabolic_network_TCA.ipynb
 uv run jupyter execute notebooks/TCA_OpenFLUX.ipynb
 # uv run jupyter execute notebooks/TCA_OpenFLUX_CI.ipynb # fails (SMQError: Too many open files)
 uv run jupyter execute notebooks/theoretical_example.ipynb
+uv run jupyter execute notebooks/toy_example.ipynb
 # uv run jupyter execute notebooks/unconstrained_coda_comparison.ipynb # fails (missing objective_ilr_wssr, objective_leave_one_out_wssr)
 
 echo "Analysis pipeline completed successfully!"
