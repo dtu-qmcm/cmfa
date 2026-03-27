@@ -26,7 +26,7 @@ IX_FREE_FLUXES = np.array([2, 4])
 IX_FIXED_FLUXES = np.array([1, 3, 5])
 TOTAL_MOL = 1e5
 SIGMA = 0.1
-N_MEASUREMENT_PER_FLUX = 20
+N_MEASUREMENT_PER_FLUX = 50
 INITIAL_GUESS = jnp.array([100, 50])
 SIMULATE_COMPOSITION = partial(simple_net, v1=KNOWN_FLUXES[0].item())
 SEED = 1234
@@ -112,11 +112,12 @@ def main():
     intensity_msts = jnp.empty(
         (len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_comp)
     )
+    true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
-        true_id = SIMULATE_COMPOSITION(free_flux)
-        intensity_msts_i = simulate_measurements(keys, true_id, SIGMA)
+        true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
+        intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
         id_msts_i = closure(intensity_msts_i)
         id_sd_trad = np.std(id_msts_i, axis=0)
@@ -155,6 +156,9 @@ def main():
     free_flux_path = OUTPUT_FOLDER / "free_fluxes.npy"
     print(f"Writing {free_flux_path}...")
     jnp.save(free_flux_path, free_fluxes)
+    true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
+    print(f"Writing {true_ids_path}...")
+    jnp.save(true_ids_path, true_ids)
 
 
 if __name__ == "__main__":
