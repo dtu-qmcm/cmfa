@@ -258,24 +258,27 @@ def objective_clr_wssr(params, args):
     return jax.lax.cond(jnp.any(params < 0), penalty, compute, operand=None)
 
 
-def calc_ci(opti_solution, confidence_level=0.95) -> dict:
+def calculate_ci(opti_solution, confidence_level=0.95):
+    """
+    Parameters
+    ----------
+    opti_solution: class optimistix.Solution
+    confidence_level: The confidence level of the confidence interval. Default 0.95
+
+    Returns
+    -------
+    ci_range: array
+        A `(2, n)` matrix of the cconfidense interval for the free fluxes.
+    """
     hess_inv = opti_solution.state.f_info.hessian_inv.pytree
     cov_matrix = jnp.asarray(hess_inv)
     standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
-    # Parameters from your optimization
     params = jnp.asarray(opti_solution.value)
     alpha = 1 - confidence_level
-
-    # Critical value (Z-score for 95%)
     z = stats.norm.ppf(1 - alpha / 2)
-
-    # Calculate bounds
-    lower_bounds = params - z * standard_errors
-    upper_bounds = params + z * standard_errors
+    lower_bounds = jnp.exp(params - z * standard_errors)
+    upper_bounds = jnp.exp(params + z * standard_errors)
 
     ci_range = jnp.stack([lower_bounds, upper_bounds], axis=1)
-    return {
-        "params": params,
-        "standard_errors": standard_errors,
-        "ci_bounds": ci_range,
-    }
+
+    return ci_range

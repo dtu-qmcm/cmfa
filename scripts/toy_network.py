@@ -10,7 +10,7 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure
+from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure, calculate_ci
 
 jax.config.update("jax_enable_x64", True)
 
@@ -100,9 +100,18 @@ def main():
         for range_i, grid_size_i in zip(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
     ]
     free_fluxes = jnp.array(list(product(*flux_ranges)))
+    n_free_flux = len(IX_FREE_FLUXES)
     key = jax.random.key(seed=SEED)
     flux_estimates = {
         model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    flux_ci = {
+        model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, 2, n_free_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    hessian_matrices = {
+        model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_free_flux, n_free_flux))
         for model in ("trad", "clr", "ilr")
     }
     id_estimates = {
@@ -142,10 +151,20 @@ def main():
                 id_est = result.aux
                 flux_estimates[m] = flux_estimates[m].at[i, j].set(flux_est)
                 id_estimates[m] = id_estimates[m].at[i, j].set(id_est)
+                flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(result))      
+                hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)
     flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
         pickle.dump(flux_estimates, f)
+    flux_ci_path = OUTPUT_FOLDER / "estimated_fluxes_ci.pkl"
+    print(f"Writing {flux_ci_path}...")
+    with open(flux_ci_path, "wb") as f:
+        pickle.dump(flux_ci, f)
+    hessian_matrices_path = OUTPUT_FOLDER / "hessian_matrices.pkl"
+    print(f"Writing {hessian_matrices_path}...")
+    with open(hessian_matrices_path, "wb") as f:
+        pickle.dump(hessian_matrices, f)
     id_estimate_path = OUTPUT_FOLDER / "estimated_ids.pkl"
     print(f"Writing {id_estimate_path}...")
     with open(id_estimate_path, "wb") as f:
