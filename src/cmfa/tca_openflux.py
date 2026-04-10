@@ -119,7 +119,7 @@ def TCA_OpenFLux(parameters: dict, fixed: dict) -> dict:
     A1 = jnp.array(
         [
             [
-                -v["v3"] - v5 - v6 - v9 - v19 - v20,
+                -v3 - v5 - v6 - v9 - v19 - v20,
                 v3 + v19 + v20,
                 v6,
                 v9,
