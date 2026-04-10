@@ -73,6 +73,28 @@ def loss_ilr(log_free_flux, args):
         ordered_ilr_func(composition), (ordered_ilr_func(target), weights)
     ), composition
 
+def gini_coefficient(x):
+    """
+    Calculate Gini coefficient of a list or array.
+    Works for proportions or raw values.
+    """
+    x = np.array(x, dtype=float)
+    
+    if np.amin(x) < 0:
+        raise ValueError("Values must be non-negative")
+    
+    if np.sum(x) == 0:
+        return 0
+    
+    # Sort values
+    x = np.sort(x)
+    n = len(x)
+    
+    # Compute Gini
+    index = np.arange(1, n + 1)
+    gini = (2 * np.sum(index * x)) / (n * np.sum(x)) - (n + 1) / n
+    
+    return gini
 
 def main():
     flux_from_free = partial(
@@ -124,7 +146,7 @@ def main():
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         key, _ = jax.random.split(key)
-        keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
+        keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
