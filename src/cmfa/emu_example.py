@@ -271,9 +271,15 @@ def calculate_ci(opti_solution, confidence_level=0.95):
         A `(2, n)` matrix of the cconfidense interval for the free fluxes.
     """
     hess_inv = opti_solution.state.f_info.hessian_inv.pytree
-    cov_matrix = jnp.asarray(hess_inv)
-    standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
-    params = jnp.asarray(opti_solution.value)
+    if type(hess_inv) == dict:
+        diag_elements = jnp.array([hess_inv[k][k] for k in hess_inv.keys()])
+        standard_errors = jnp.sqrt(diag_elements)
+        params = jnp.array([opti_solution.value[k] for k in hess_inv.keys()])
+    else:
+        cov_matrix = jnp.asarray(hess_inv)
+        standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
+        params = jnp.asarray(opti_solution.value)
+
     alpha = 1 - confidence_level
     z = stats.norm.ppf(1 - alpha / 2)
     lower_bounds = jnp.exp(params - z * standard_errors)

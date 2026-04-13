@@ -428,19 +428,6 @@ def objective_clr_wssr(params: dict, args):
     )
     return total
 
-
-def objective_alr_wssr(params: dict, args):
-    data_obs, D_list, fixed = args
-    outputs = TCA_OpenFLux(params, fixed)
-    outputs_clr = jax.tree.map(lambda x: alr_func(x), outputs)
-    residuals = jax.tree.map(lambda e, o: e - o, outputs_clr, data_obs)
-    total = sum(
-        r.T @ jnp.linalg.inv(D) @ r
-        for r, D in zip(jax.tree.leaves(residuals), jax.tree.leaves(D_list))
-    )
-    return total
-
-
 def calc_ci(opti_solution, confidence_level=0.95) -> dict:
     hess_inv_dict = opti_solution.state.f_info.hessian_inv.pytree
     standard_errors = {
