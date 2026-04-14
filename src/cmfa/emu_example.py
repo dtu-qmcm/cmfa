@@ -288,3 +288,26 @@ def calculate_ci(opti_solution, confidence_level=0.95):
     ci_range = jnp.stack([lower_bounds, upper_bounds], axis=1)
 
     return ci_range
+
+def gini_coefficient(x):
+    """
+    Calculate Gini coefficient of a list or array.
+    Works for proportions or raw values.
+    """
+    x = np.array(x, dtype=float)
+    
+    if np.amin(x) < 0:
+        raise ValueError("Values must be non-negative")
+    
+    if np.sum(x) == 0:
+        return 0
+    
+    # Sort values
+    x = np.sort(x)
+    n = len(x)
+    
+    # Compute Gini
+    index = np.arange(1, n + 1)
+    gini = (2 * np.sum(index * x)) / (n * np.sum(x)) - (n + 1) / n
+    
+    return gini

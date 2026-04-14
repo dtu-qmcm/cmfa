@@ -10,7 +10,7 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure, calculate_ci
+from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure, calculate_ci, gini_coefficient
 
 jax.config.update("jax_enable_x64", True)
 
@@ -73,29 +73,6 @@ def loss_ilr(log_free_flux, args):
         ordered_ilr_func(composition), (ordered_ilr_func(target), weights)
     ), composition
 
-def gini_coefficient(x):
-    """
-    Calculate Gini coefficient of a list or array.
-    Works for proportions or raw values.
-    """
-    x = np.array(x, dtype=float)
-    
-    if np.amin(x) < 0:
-        raise ValueError("Values must be non-negative")
-    
-    if np.sum(x) == 0:
-        return 0
-    
-    # Sort values
-    x = np.sort(x)
-    n = len(x)
-    
-    # Compute Gini
-    index = np.arange(1, n + 1)
-    gini = (2 * np.sum(index * x)) / (n * np.sum(x)) - (n + 1) / n
-    
-    return gini
-
 def main():
     flux_from_free = partial(
         get_flux_vector,
@@ -144,10 +121,12 @@ def main():
         (len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_comp)
     )
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
+    gini_indices = jnp.empty((free_fluxes.shape[0], 1))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
+        gini_indices = gini_indices.at[i].set(gini_coefficient(true_ids[i]))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
         id_msts_i = closure(intensity_msts_i)
@@ -200,6 +179,9 @@ def main():
     true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
     print(f"Writing {true_ids_path}...")
     jnp.save(true_ids_path, true_ids)
+    gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
+    print(f"Writing {gini_indices_path}...")
+    jnp.save(gini_indices_path, gini_indices)
 
 
 if __name__ == "__main__":
