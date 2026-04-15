@@ -10,14 +10,13 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, ordered_ilr_func, closure, calculate_ci
+from cmfa.emu_example import clr_func, ordered_ilr_func, closure, calculate_ci, gini_coefficient
 from cmfa.tca_openflux import TCA_OpenFLux, flux_vector
 
 jax.config.update("jax_enable_x64", True)
 
 PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_FOLDER = PROJECT_ROOT / "data" / "results" / "tca_cycle"
-# M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
 V_FREE = {"v8": 0.215, "v1": 1, "v19": 0.05, "v20": 0.03, "v16": 0.07, "v17": 0.23, "v18": 0.12, "v2": 0.201, "v9": 0.296}
 KNOWN_KEYS = ["v1", "v16", "v17", "v18", "v19", "v20"]
 KNOWN_FLUXES = {k: V_FREE[k] for k in KNOWN_KEYS}
@@ -25,13 +24,8 @@ FREE_KEYS = ["v8", "v2", "v9"]
 
 TRUE_FREE_FLUXES = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
 
-# KNOWN_FLUXES = {'v1': 1, 'v16': 0.07, 'v17': 0.23, 'v18': 0.12, 'v19': 0.05, 'v20': 0.03}
-# TRUE_FREE_FLUXES = {'v8': 0.215, 'v2': 0.201, 'v9': 0.296}
 FREE_FLUX_RANGE = [[0.115, 0.315], [0.101, 0.301], [0.196, 0.396]]
-FREE_FLUX_GRID_SIZE = [11, 11, 11]
-# IX_INPUT_FLUX = np.array([0])
-# IX_FREE_FLUXES = np.array([2, 4])
-# IX_FIXED_FLUXES = np.array([1, 3, 5])
+FREE_FLUX_GRID_SIZE = [5,5,5]
 TOTAL_MOL = 1e5
 SIGMA = 0.1
 N_MEASUREMENT_PER_FLUX = 50
@@ -93,7 +87,7 @@ true_flux = flux_from_free(TRUE_FREE_FLUXES)
 true_id = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
 true_flux_file = OUTPUT_FOLDER / "true_flux.npy"
 n_flux = len(true_flux)
-n_comp = len(true_id)
+n_comp = sum(v.size for v in true_id.values())
 
 true_composition_file = OUTPUT_FOLDER / "true_composition.npy"
 print(f"True flux: {true_flux}")
@@ -106,53 +100,48 @@ flux_ranges = [
     np.linspace(range_i[0], range_i[1], grid_size_i)
     for range_i, grid_size_i in zip(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
 ]
-
 free_fluxes = jnp.array(list(product(*flux_ranges)))
 
 n_free_flux = len(TRUE_FREE_FLUXES)
 key = jax.random.key(seed=SEED)
 
 flux_estimates = {
-    model: []
+    model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_free_flux))
     for model in ("trad", "clr", "ilr")
 }
 
 flux_ci = {
-    model: []
+    model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_free_flux, 2))
     for model in ("trad", "clr", "ilr")
 }
 hessian_matrices = {
     model: []
     for model in ("trad", "clr", "ilr")
 }
+
 id_estimates = {
-    model: []
+    model: [[0 for _ in range(N_MEASUREMENT_PER_FLUX)] for _ in range(len(free_fluxes))]
     for model in ("trad", "clr", "ilr")
 }
-
-flux_ci = {
-    model: []
-    for model in ("trad", "clr", "ilr")
-}
-
 true_ids = []
 intensity_msts = []
+gini_indices = []
 
 for i, free_flux in enumerate(tqdm(free_fluxes)):
     key, _ = jax.random.split(key)
     keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
     free_flux_dict = {k: float(v) for k, v in zip(FREE_KEYS, free_flux)}
-    true_ids.append({"flux_set_index": i, "true_ids": SIMULATE_COMPOSITION(free_flux_dict)})
-    
-    intensity_msts_i = simulate_measurements(keys, true_ids[i]["true_ids"], SIGMA)
-    intensity_msts.append({"flux_set_index": i, "intensity_msts": intensity_msts_i})
+    true_ids.append(SIMULATE_COMPOSITION(free_flux_dict))
+    gini_index = jax.tree.map(lambda x: gini_coefficient(x), true_ids[i])
+    gini_indices.append(jax.tree.map(lambda x: gini_coefficient(x), true_ids[i]))
+    intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
+    intensity_msts.append(intensity_msts_i)
     id_msts_i = jax.tree.map(jax.vmap(closure), intensity_msts_i)
     id_sd_trad = jax.tree.map(lambda x: np.std(x, axis=0), id_msts_i)
     id_sd_clr = jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_i)
     id_sd_ilr = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_i)
     for j in range(N_MEASUREMENT_PER_FLUX):
         mst_j = jax.tree.map(lambda x: x[j], id_msts_i)
-    for j, mst in enumerate(id_msts_i):
         for m, loss, sd_tree in (
             ("trad", loss_trad, id_sd_trad),
             ("clr", loss_clr, id_sd_clr),
@@ -169,9 +158,13 @@ for i, free_flux in enumerate(tqdm(free_fluxes)):
             )
             flux_est = flux_from_free(jax.tree.map(lambda x: jnp.exp(x), result.value))
             id_est = result.aux
-            flux_estimates[m].append({"flux_set_index": i,"sample_index": j, "flux_estimates": flux_est})
-            id_estimates[m].append({"flux_set_index": i, "sample_index": j, "id_estimates": id_est})
-            flux_ci[m].append({"flux_set_index": i,"sample_index": j, "confidence_interval": calculate_ci(result)})      
+            free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
+            flux_estimates[m] = flux_estimates[m].at[i, j].set(free_flux_est)
+            id_est_vec = jnp.concatenate(list(id_est.values()))
+            id_estimates[m][i][j]=id_est
+            flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(result))
+            # id_estimates[m].append({"flux_set_index": i, "sample_index": j, "id_estimates": id_est})
+            # flux_ci[m].append({"flux_set_index": i,"sample_index": j, "confidence_interval": calculate_ci(result)})      
             # hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)
 flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
 print(f"Writing {flux_estimate_path}...")
@@ -206,3 +199,8 @@ true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
 print(f"Writing {true_ids_path}...")
 with open(true_ids_path, "wb") as f:
     pickle.dump(true_ids, f)
+
+gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
+print(f"Writing {gini_indices_path}...")
+with open(gini_indices_path, "wb") as f:
+    pickle.dump(gini_indices, f)
