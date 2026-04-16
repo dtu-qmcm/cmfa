@@ -43,7 +43,9 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
     # The free fluxes
     v_free = jnp.array([v1, v3, v5])
     # The dependent fluxes calcualted from M and the free fluxes
-    v2, v4, v6 = -M @ v_free
+    # v2, v4, v6 = -M @ v_free
+    u = jnp.stack([-M, jnp.identity(3)]) @ v_free
+    v2, v4, v6 = u[0]
 
     A1 = jnp.array(
         [

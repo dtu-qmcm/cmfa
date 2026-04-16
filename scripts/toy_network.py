@@ -38,8 +38,8 @@ def get_flux_vector(free, known, ix_known, ix_free, M):
     ix_fixed = jnp.delete(jnp.arange(n), ix_known_or_free)
     out = jnp.zeros(shape=(n,)).at[ix_known].set(known).at[ix_free].set(free)
     fixed = -M @ out[jnp.concat([ix_known, ix_free])]
+    u = jnp.stack([-M, jnp.identity(len(ix_known_or_free))]) @ jnp.concat([known, free])
     return out.at[ix_fixed].set(fixed)
-
 
 def simulate_measurement(key, yhat, sigma):
     err = jax.random.normal(key, shape=(yhat.shape)) * sigma

@@ -1,0 +1,167 @@
+import pdb
+import pickle
+from itertools import product
+from pathlib import Path
+from functools import partial
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optimistix
+from tqdm import tqdm
+
+from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure, calculate_ci, gini_coefficient
+
+jax.config.update("jax_enable_x64", True)
+
+PROJECT_ROOT = Path(__file__).parent.parent
+OUTPUT_FOLDER = PROJECT_ROOT / "data" / "results" / "toy_example"
+M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
+KNOWN_FLUXES = jnp.array([100.0])
+TRUE_FREE_FLUXES = jnp.array([50.0, 20.0])
+IX_INPUT_FLUX = np.array([0])
+IX_FREE_FLUXES = np.array([2, 4])
+IX_FIXED_FLUXES = np.array([1, 3, 5])
+TOTAL_MOL = 1e5
+SIGMA = 0.1
+N_MEASUREMENT_PER_FLUX = 1000
+INITIAL_GUESS = jnp.array([100, 50])
+SIMULATE_COMPOSITION = partial(simple_net, v1=KNOWN_FLUXES[0].item())
+SEED = 1234
+
+
+def get_flux_vector(free, known, ix_known, ix_free, M):
+    n = known.shape[0] + free.shape[0] + M.shape[0]
+    ix_known_or_free = jnp.concat([ix_free, ix_known])
+    ix_fixed = jnp.delete(jnp.arange(n), ix_known_or_free)
+    out = jnp.zeros(shape=(n,)).at[ix_known].set(known).at[ix_free].set(free)
+    fixed = -M @ out[jnp.concat([ix_known, ix_free])]
+    u = jnp.stack([-M, jnp.identity(len(ix_known_or_free))]) @ jnp.concat([known, free])
+    return out.at[ix_fixed].set(fixed)
+
+
+def simulate_measurement(key, yhat, sigma):
+    err = jax.random.normal(key, shape=(yhat.shape)) * sigma
+    log_mst = jnp.log(yhat) + err
+    return jnp.exp(log_mst)
+
+
+simulate_measurements = jax.vmap(simulate_measurement, in_axes=(0, None, None))
+
+
+def wssr(y, args):
+    target, weights = args
+    return jnp.sum(weights * (y - target) ** 2)
+
+
+def loss_trad(log_free_flux, args):
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
+    return wssr(composition, args), composition
+
+
+def loss_clr(log_free_flux, args):
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
+    target, weights = args
+    return wssr(clr_func(composition), (clr_func(target), weights)), composition
+
+
+def loss_ilr(log_free_flux, args):
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
+    target, weights = args
+    return wssr(
+        ordered_ilr_func(composition), (ordered_ilr_func(target), weights)
+    ), composition
+
+def main():
+    flux_from_free = partial(
+        get_flux_vector,
+        known=KNOWN_FLUXES,
+        ix_known=IX_INPUT_FLUX,
+        ix_free=IX_FREE_FLUXES,
+        M=M,
+    )
+    solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
+    true_flux = flux_from_free(TRUE_FREE_FLUXES)
+    true_id = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
+    true_flux_file = OUTPUT_FOLDER / "true_flux.npy"
+    n_flux = len(true_flux)
+    n_comp = len(true_id)
+    true_composition_file = OUTPUT_FOLDER / "true_composition.npy"
+    print(f"True flux: {true_flux}")
+    print(f"True composition: {true_id}")
+    print(f"Writing {true_flux_file}...")
+    np.save(true_flux_file, true_flux)
+    print(f"Writing {true_composition_file}...")
+    np.save(true_composition_file, true_id)
+    n_free_flux = len(IX_FREE_FLUXES)
+    key = jax.random.key(seed=SEED)
+    flux_estimates = {
+        model: jnp.empty((N_MEASUREMENT_PER_FLUX, n_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    flux_ci = {
+        model: jnp.empty((N_MEASUREMENT_PER_FLUX, 2, n_free_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    hessian_matrices = {
+        model: jnp.empty((N_MEASUREMENT_PER_FLUX, n_free_flux, n_free_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    id_estimates = {
+        model: jnp.empty(( N_MEASUREMENT_PER_FLUX, n_comp))
+        for model in ("trad", "clr", "ilr")
+    }
+    key, _ = jax.random.split(key)
+    keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
+    intensity_msts = simulate_measurements(keys, true_id, SIGMA)
+    id_msts = closure(intensity_msts)
+    id_sd_trad = np.std(id_msts, axis=0)
+    id_sd_clr = np.std(clr_func(id_msts), axis=0)
+    id_sd_ilr = np.std(ordered_ilr_func(id_msts), axis=0)
+    for j, mst in enumerate(tqdm(id_msts)):
+        for m, loss, composition_sd in (
+            ("trad", loss_trad, id_sd_trad),
+            ("clr", loss_clr, id_sd_clr),
+            ("ilr", loss_ilr, id_sd_ilr),
+        ):
+            result = optimistix.minimise(
+                loss,
+                y0=jnp.log(INITIAL_GUESS),
+                args=(mst, 1 / composition_sd),
+                solver=solver,
+                max_steps=10000,
+                throw=False,
+                has_aux=True,
+            )
+            flux_est = flux_from_free(jnp.exp(result.value))
+            id_est = result.aux
+            flux_estimates[m] = flux_estimates[m].at[j].set(flux_est)
+            id_estimates[m] = id_estimates[m].at[j].set(id_est)
+            flux_ci[m] = flux_ci[m].at[j].set(calculate_ci(result))      
+            hessian_matrices[m] = hessian_matrices[m].at[j].set(result.state.f_info.hessian_inv.pytree)
+    intensity_msts_path = OUTPUT_FOLDER / "intensity_measurements_reference.npy"
+    print(f"Writing {intensity_msts_path}...")
+    jnp.save(intensity_msts_path, intensity_msts)
+    id_msts_path = OUTPUT_FOLDER / "id_simulated_reference.npy"
+    print(f"Writing {id_msts_path}...")
+    jnp.save(id_msts_path, id_msts)
+    flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes_reference.pkl"
+    print(f"Writing {flux_estimate_path}...")
+    with open(flux_estimate_path, "wb") as f:
+        pickle.dump(flux_estimates, f)
+    flux_ci_path = OUTPUT_FOLDER / "estimated_fluxes_ci_reference.pkl"
+    print(f"Writing {flux_ci_path}...")
+    with open(flux_ci_path, "wb") as f:
+        pickle.dump(flux_ci, f)
+    hessian_matrices_path = OUTPUT_FOLDER / "hessian_matrices_reference.pkl"
+    print(f"Writing {hessian_matrices_path}...")
+    with open(hessian_matrices_path, "wb") as f:
+        pickle.dump(hessian_matrices, f)
+    id_estimate_path = OUTPUT_FOLDER / "estimated_ids_reference.pkl"
+    print(f"Writing {id_estimate_path}...")
+    with open(id_estimate_path, "wb") as f:
+        pickle.dump(id_estimates, f)
+
+
+if __name__ == "__main__":
+    main()
