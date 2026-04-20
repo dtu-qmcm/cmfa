@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import config
+import sympy
 from scipy import stats
 from scipy.spatial.distance import euclidean
 from skbio.stats.composition import sbp_basis
@@ -19,10 +20,11 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
     :return f123: MID for F123
     """
 
-    v3, v5 = parameters
+    v2, v4 = parameters
     # v1 is the input flux and are fixed
     v1 = v1
 
+    # old version:
     # Stoicometric matrix. Rows=(d,c,b), columns = (v2,v4,v6,v1,v3,v5)
     # S = np.array([
     #     [1, 0, -1, 0, -1, 1],
@@ -36,16 +38,36 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
     #     [0, 1, 0, 0, 0, -1],
     #     [0, 0, 1, -1, 0, 1],
     # ], dtype=float)
-
     # The right-hand-side of S_s
-    M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
+    # M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
 
-    # The free fluxes
-    v_free = jnp.array([v1, v3, v5])
-    # The dependent fluxes calcualted from M and the free fluxes
-    # v2, v4, v6 = -M @ v_free
-    u = jnp.stack([-M, jnp.identity(3)]) @ v_free
-    v2, v4, v6 = u[0]
+    # # The free fluxes
+    # v_free = jnp.array([v1, v3, v5])
+    # # The dependent fluxes calcualted from M and the free fluxes
+    # # v2, v4, v6 = -M @ v_free
+    # u = jnp.stack([-M, jnp.identity(3)]) @ v_free
+    # v2, v4, v6 = u[0]
+
+    # # Rows = (b,c,d), columns = (v3, v5, v6, v1, v2, v4)
+    S = np.array([
+        [1,-1,0,1,-1,-1],
+        [0,-1,0,0,0,1],
+        [-1,1,-1,0,1,0],
+    ])
+    # reduced row echelon form
+    S_rref, dep_index = sympy.Matrix(S).rref()
+
+    # the indecies for the free fluxes
+    free_index = jnp.array([i for i in range(6) if i not in dep_index])
+
+    # The "right hand-side" of S_s
+    M = jnp.array(np.array(S_rref, dtype=float))[:,free_index]
+
+    v_free = jnp.array([v1, v2, v4])
+    # The fluxes calcualted from M and the free fluxes
+    v_full = jnp.vstack([-M, jnp.eye(3)]) @ v_free
+
+    v3, v5, v6 = v_full[jnp.array(dep_index)]
 
     A1 = jnp.array(
         [

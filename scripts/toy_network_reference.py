@@ -16,12 +16,13 @@ jax.config.update("jax_enable_x64", True)
 
 PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_FOLDER = PROJECT_ROOT / "data" / "results" / "toy_example"
-M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
+# M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
+M = jnp.array([[1, -1, -2],[0, 0, -1],[-1, 0, 1]])
 KNOWN_FLUXES = jnp.array([100.0])
-TRUE_FREE_FLUXES = jnp.array([50.0, 20.0])
+TRUE_FREE_FLUXES = jnp.array([110.0, 20.0])
 IX_INPUT_FLUX = np.array([0])
-IX_FREE_FLUXES = np.array([2, 4])
-IX_FIXED_FLUXES = np.array([1, 3, 5])
+IX_FREE_FLUXES = np.array([1, 3])
+IX_FIXED_FLUXES = np.array([2, 4, 5])
 TOTAL_MOL = 1e5
 SIGMA = 0.1
 N_MEASUREMENT_PER_FLUX = 1000
