@@ -10,7 +10,14 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure
+from cmfa.emu_example import (
+    clr_func,
+    simple_net,
+    ordered_ilr_func,
+    closure,
+    calculate_ci,
+    gini_coefficient,
+)
 
 jax.config.update("jax_enable_x64", True)
 
@@ -38,6 +45,9 @@ def get_flux_vector(free, known, ix_known, ix_free, M):
     ix_fixed = jnp.delete(jnp.arange(n), ix_known_or_free)
     out = jnp.zeros(shape=(n,)).at[ix_known].set(known).at[ix_free].set(free)
     fixed = -M @ out[jnp.concat([ix_known, ix_free])]
+    u = jnp.stack([-M, jnp.identity(len(ix_known_or_free))]) @ jnp.concat(
+        [known, free]
+    )
     return out.at[ix_fixed].set(fixed)
 
 
@@ -100,9 +110,22 @@ def main():
         for range_i, grid_size_i in zip(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
     ]
     free_fluxes = jnp.array(list(product(*flux_ranges)))
+    n_free_flux = len(IX_FREE_FLUXES)
     key = jax.random.key(seed=SEED)
     flux_estimates = {
         model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    flux_ci = {
+        model: jnp.empty(
+            (len(free_fluxes), N_MEASUREMENT_PER_FLUX, 2, n_free_flux)
+        )
+        for model in ("trad", "clr", "ilr")
+    }
+    hessian_matrices = {
+        model: jnp.empty(
+            (len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_free_flux, n_free_flux)
+        )
         for model in ("trad", "clr", "ilr")
     }
     id_estimates = {
@@ -113,10 +136,12 @@ def main():
         (len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_comp)
     )
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
+    gini_indices = jnp.empty((free_fluxes.shape[0], 1))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         main_key, mc_key = jax.random.split(key)
         keys = jax.random.split(main_key, N_MEASUREMENT_PER_FLUX)
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
+        gini_indices = gini_indices.at[i].set(gini_coefficient(true_ids[i]))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
         id_msts_i = closure(intensity_msts_i)
@@ -189,6 +214,14 @@ def main():
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
         pickle.dump(flux_estimates, f)
+    flux_ci_path = OUTPUT_FOLDER / "estimated_fluxes_ci.pkl"
+    print(f"Writing {flux_ci_path}...")
+    with open(flux_ci_path, "wb") as f:
+        pickle.dump(flux_ci, f)
+    hessian_matrices_path = OUTPUT_FOLDER / "hessian_matrices.pkl"
+    print(f"Writing {hessian_matrices_path}...")
+    with open(hessian_matrices_path, "wb") as f:
+        pickle.dump(hessian_matrices, f)
     id_estimate_path = OUTPUT_FOLDER / "estimated_ids.pkl"
     print(f"Writing {id_estimate_path}...")
     with open(id_estimate_path, "wb") as f:
@@ -202,6 +235,9 @@ def main():
     true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
     print(f"Writing {true_ids_path}...")
     jnp.save(true_ids_path, true_ids)
+    gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
+    print(f"Writing {gini_indices_path}...")
+    jnp.save(gini_indices_path, gini_indices)
 
 
 if __name__ == "__main__":
