@@ -114,8 +114,8 @@ def main():
     )
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
-        key, _ = jax.random.split(key)
-        keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
+        main_key, mc_key = jax.random.split(key)
+        keys = jax.random.split(main_key, N_MEASUREMENT_PER_FLUX)
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
@@ -142,6 +142,49 @@ def main():
                 id_est = result.aux
                 flux_estimates[m] = flux_estimates[m].at[i, j].set(flux_est)
                 id_estimates[m] = id_estimates[m].at[i, j].set(id_est)
+        if jnp.isclose(free_flux, TRUE_FREE_FLUXES).all():
+            N_MONTE_CARLO = 10000
+            mc_keys = jax.random.split(mc_key, N_MONTE_CARLO)
+            mc_msts = simulate_measurements(mc_keys, true_ids[i], SIGMA)
+            mc_id_msts = closure(mc_msts)
+            mc_flux_estimates = {
+                m: jnp.empty((N_MONTE_CARLO, n_flux))
+                for m in ("trad", "clr", "ilr")
+            }
+            mc_id_estimates = {
+                m: jnp.empty((N_MONTE_CARLO, n_comp))
+                for m in ("trad", "clr", "ilr")
+            }
+
+            for mc_i, mc_id_mst in enumerate(mc_id_msts):
+                for m, loss, composition_sd in (
+                    ("trad", loss_trad, id_sd_trad),
+                    ("clr", loss_clr, id_sd_clr),
+                    ("ilr", loss_ilr, id_sd_ilr),
+                ):
+                    result = optimistix.minimise(
+                        loss,
+                        y0=jnp.log(INITIAL_GUESS),
+                        args=(mc_id_mst, 1 / composition_sd),
+                        solver=solver,
+                        max_steps=10000,
+                        throw=False,
+                        has_aux=True,
+                    )
+                    flux_est = flux_from_free(jnp.exp(result.value))
+                    id_est = result.aux
+                    mc_flux_estimates[m] = (
+                        mc_flux_estimates[m].at[mc_i].set(flux_est)
+                    )
+                    mc_id_estimates[m] = mc_id_estimates[m].at[mc_i].set(id_est)
+    mc_flux_path = OUTPUT_FOLDER / "monte_carlo_estimated_fluxes.pkl"
+    print(f"Writing {mc_flux_path}...")
+    with open(mc_flux_path, "wb") as f:
+        pickle.dump(mc_flux_estimates, f)
+    mc_id_path = OUTPUT_FOLDER / "monte_carlo_estimated_ids.pkl"
+    print(f"Writing {mc_id_path}...")
+    with open(mc_id_path, "wb") as f:
+        pickle.dump(mc_id_estimates, f)
     flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
