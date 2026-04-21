@@ -4,6 +4,8 @@ from itertools import product
 from pathlib import Path
 from functools import partial
 
+from scipy.stats import entropy
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -122,11 +124,15 @@ def main():
     )
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
     gini_indices = jnp.empty((free_fluxes.shape[0], 1))
+    entro = jnp.empty((free_fluxes.shape[0], 1))
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
         gini_indices = gini_indices.at[i].set(gini_coefficient(true_ids[i]))
+        pk = true_ids[i] 
+        pdb.set_trace()
+        entro = entro.at[i].set(entropy(pk=pk))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
         id_msts_i = closure(intensity_msts_i)
@@ -182,6 +188,10 @@ def main():
     gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
     print(f"Writing {gini_indices_path}...")
     jnp.save(gini_indices_path, gini_indices)
+    entro_path = OUTPUT_FOLDER / "entropy.npy"
+    print(f"Writing {entro_path}...")
+    jnp.save(entro_path, entro)
+
 
 
 if __name__ == "__main__":
