@@ -16,6 +16,7 @@ dependencies = [
     "optimistix",
     "plotly>=6.5.2",
     "polars",
+    "pyarrow>=23.0.1",
     "python-ternary>=1.0.8",
     "scikit-bio",
     "scipy",
