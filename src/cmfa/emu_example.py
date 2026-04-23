@@ -121,6 +121,7 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
 
     Y1 = jnp.array([a2, a3])
     X1 = jnp.linalg.solve(A1, B1 @ Y1)
+    jnp.linalg.solve
 
     c1 = X1[0]
     b2 = X1[1]
@@ -142,6 +143,12 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
     f123 = X3[0]
     d123 = X3[1]
     b123 = X3[2]
+    # jax.debug.print("{}", f123)
+    # if jnp.any(f123<0.0):
+    #     jax.debug.print("########")
+    #     if jnp.all(v_full>0.0):
+    #         jax.debug.print("!!!!!!!!")
+    #     return jnp.full_like(f123, 1.0e-1)
 
     return f123
 
@@ -282,7 +289,7 @@ def objective_clr_wssr(params, args):
     return jax.lax.cond(jnp.any(params < 0), penalty, compute, operand=None)
 
 
-def calculate_ci(opti_solution, confidence_level=0.95):
+def calculate_ci(sigma_v, log_fluxes, confidence_level=0.95):
     """
     Parameters
     ----------
@@ -294,15 +301,14 @@ def calculate_ci(opti_solution, confidence_level=0.95):
     ci_range: array
         A `(2, n)` matrix of the cconfidense interval for the free fluxes.
     """
-    hess_inv = opti_solution.state.f_info.hessian_inv.pytree
-    if type(hess_inv) == dict:
-        diag_elements = jnp.array([hess_inv[k][k] for k in hess_inv.keys()])
+    if type(sigma_v) == dict:
+        diag_elements = jnp.array([sigma_v[k][k] for k in sigma_v.keys()])
         standard_errors = jnp.sqrt(diag_elements)
-        params = jnp.array([opti_solution.value[k] for k in hess_inv.keys()])
+        params = jnp.array([log_fluxes[k] for k in sigma_v.keys()])
     else:
-        cov_matrix = jnp.asarray(hess_inv)
+        cov_matrix = jnp.asarray(sigma_v)
         standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
-        params = jnp.asarray(opti_solution.value)
+        params = jnp.asarray(log_fluxes)
 
     alpha = 1 - confidence_level
     z = stats.norm.ppf(1 - alpha / 2)

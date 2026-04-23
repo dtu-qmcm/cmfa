@@ -18,6 +18,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_FOLDER = PROJECT_ROOT / "data" / "results" / "toy_example"
 
 M = jnp.array([[1, -1, -2],[0, 0, -1],[-1, 0, 1]])
+N = jnp.vstack([-M, jnp.eye(3)])
 KNOWN_FLUXES = jnp.array([100.0])
 TRUE_FREE_FLUXES = jnp.array([110.0, 20.0])
 IX_INPUT_FLUX = np.array([0])
@@ -76,6 +77,9 @@ def loss_ilr(log_free_flux, args):
         ordered_ilr_func(composition), (ordered_ilr_func(target), weights)
     ), composition
 
+def get_sigma_v(N, inv_hessian):
+    return N @ inv_hessian @ N.T
+
 def main():
     flux_from_free = partial(
         get_flux_vector,
@@ -129,6 +133,8 @@ def main():
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
+        if np.any(true_ids[i] < 0.0):
+            continue
         gini_indices = gini_indices.at[i].set(gini_coefficient(true_ids[i]))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts = intensity_msts.at[i].set(intensity_msts_i)
@@ -155,8 +161,10 @@ def main():
                 id_est = result.aux
                 flux_estimates[m] = flux_estimates[m].at[i, j].set(flux_est)
                 id_estimates[m] = id_estimates[m].at[i, j].set(id_est)
-                flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(result))      
                 hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)
+                sigma_v = get_sigma_v(N, hessian_matrices[m])
+                jax.debug.breakpoint()
+                flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(flux_est, sigma_v))
     flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
