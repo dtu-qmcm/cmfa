@@ -4,6 +4,8 @@ from itertools import product
 from pathlib import Path
 from functools import partial
 
+from scipy.stats import entropy
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -23,8 +25,8 @@ KNOWN_FLUXES = {k: V_FREE[k] for k in KNOWN_KEYS}
 FREE_KEYS = ["v8", "v2", "v9"]
 
 TRUE_FREE_FLUXES = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
-
-FREE_FLUX_RANGE = [[0.115, 0.315], [0.101, 0.301], [0.196, 0.396]]
+# FREE_FLUX_RANGE = [[0.115, 0.315], [0.101, 0.301], [0.196, 0.396]]
+FREE_FLUX_RANGE = [[0.5 * v, 1.5 * v] for v in TRUE_FREE_FLUXES.values()]
 FREE_FLUX_GRID_SIZE = [5,5,5]
 TOTAL_MOL = 1e5
 SIGMA = 0.1
@@ -125,15 +127,14 @@ id_estimates = {
 }
 true_ids = []
 intensity_msts = []
-gini_indices = []
+entropies = []
 
 for i, free_flux in enumerate(tqdm(free_fluxes)):
     key, _ = jax.random.split(key)
     keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
     free_flux_dict = {k: float(v) for k, v in zip(FREE_KEYS, free_flux)}
     true_ids.append(SIMULATE_COMPOSITION(free_flux_dict))
-    gini_index = jax.tree.map(lambda x: gini_coefficient(x), true_ids[i])
-    gini_indices.append(jax.tree.map(lambda x: gini_coefficient(x), true_ids[i]))
+    entropies.append(jax.tree.map(lambda x: entropy(pk=x), true_ids[i]))
     intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
     intensity_msts.append(intensity_msts_i)
     id_msts_i = jax.tree.map(jax.vmap(closure), intensity_msts_i)
@@ -162,9 +163,8 @@ for i, free_flux in enumerate(tqdm(free_fluxes)):
             flux_estimates[m] = flux_estimates[m].at[i, j].set(free_flux_est)
             id_est_vec = jnp.concatenate(list(id_est.values()))
             id_estimates[m][i][j]=id_est
-            flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(result))
-            # id_estimates[m].append({"flux_set_index": i, "sample_index": j, "id_estimates": id_est})
-            # flux_ci[m].append({"flux_set_index": i,"sample_index": j, "confidence_interval": calculate_ci(result)})      
+            inv_hessian = result.state.f_info.hessian_inv.pytree
+            flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(inv_hessian, result.value))
             # hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)
 flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
 print(f"Writing {flux_estimate_path}...")
@@ -200,7 +200,7 @@ print(f"Writing {true_ids_path}...")
 with open(true_ids_path, "wb") as f:
     pickle.dump(true_ids, f)
 
-gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
-print(f"Writing {gini_indices_path}...")
-with open(gini_indices_path, "wb") as f:
-    pickle.dump(gini_indices, f)
+entropies_path = OUTPUT_FOLDER / "entropies.npy"
+print(f"Writing {entropies_path}...")
+with open(entropies_path, "wb") as f:
+    pickle.dump(entropies, f)
