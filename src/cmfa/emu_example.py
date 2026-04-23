@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import config
+import sympy
 from scipy import stats
 from scipy.spatial.distance import euclidean
 from skbio.stats.composition import sbp_basis
@@ -20,32 +21,27 @@ def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
     """
 
     v3, v5 = parameters
-    # v1 is the input flux and are fixed
+    # v1 is the input flux and is fixed
     v1 = v1
 
-    # Stoicometric matrix. Rows=(d,c,b), columns = (v2,v4,v6,v1,v3,v5)
-    # S = np.array([
-    #     [1, 0, -1, 0, -1, 1],
-    #     [0, 1, 0, 0, 0, -1],
-    #     [-1, -1, 0, 1, 1, -1],
-    # ], dtype=float)
+    # Stoicometric matrix. Rows=(b,c,d), columns = (v2,v4,v6,v1,v3,v5)
+    S = np.array([
+        [-1, -1, 0, 1, 1, -1],
+        [0, 1, 0, 0, 0, -1],
+        [1, 0, -1, 0, -1, 1],
+    ], dtype=float)
 
-    # After Gauss-Jordan elimination
-    # S_s = np.array([
-    #     [1, 0, 0, -1, -1, 2],
-    #     [0, 1, 0, 0, 0, -1],
-    #     [0, 0, 1, -1, 0, 1],
-    # ], dtype=float)
+    S_rref, dep_index = sympy.Matrix(S).rref()
 
-    # The right-hand-side of S_s
-    M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
+    free_index = jnp.array([i for i in range(6) if i not in dep_index])
 
-    # The free fluxes
+    M = jnp.array(np.array(S_rref, dtype=float))[:,free_index]
+    
     v_free = jnp.array([v1, v3, v5])
-    # The dependent fluxes calcualted from M and the free fluxes
-    # v2, v4, v6 = -M @ v_free
-    u = jnp.stack([-M, jnp.identity(3)]) @ v_free
-    v2, v4, v6 = u[0]
+    # The fluxes calcualted from M and the free fluxes
+    v_full = jnp.vstack([-M, jnp.eye(3)]) @ v_free
+
+    v2, v4, v6 = v_full[jnp.array(dep_index)]
 
     A1 = jnp.array(
         [
@@ -259,12 +255,12 @@ def objective_clr_wssr(params, args):
 
     return jax.lax.cond(jnp.any(params < 0), penalty, compute, operand=None)
 
-
-def calculate_ci(opti_solution, confidence_level=0.95):
+def calculate_ci(sigma_v, log_fluxes, confidence_level=0.95):
     """
     Parameters
     ----------
-    opti_solution: class optimistix.Solution
+    sigma_v: Covariance matrix for all fluxes
+    log_fluxes: Vector of all log(flux)
     confidence_level: The confidence level of the confidence interval. Default 0.95
 
     Returns
@@ -272,15 +268,14 @@ def calculate_ci(opti_solution, confidence_level=0.95):
     ci_range: array
         A `(2, n)` matrix of the cconfidense interval for the free fluxes.
     """
-    hess_inv = opti_solution.state.f_info.hessian_inv.pytree
-    if type(hess_inv) == dict:
-        diag_elements = jnp.array([hess_inv[k][k] for k in hess_inv.keys()])
+    if type(sigma_v) == dict:
+        diag_elements = jnp.array([sigma_v[k][k] for k in sigma_v.keys()])
         standard_errors = jnp.sqrt(diag_elements)
-        params = jnp.array([opti_solution.value[k] for k in hess_inv.keys()])
+        params = jnp.array([log_fluxes[k] for k in sigma_v.keys()])
     else:
-        cov_matrix = jnp.asarray(hess_inv)
+        cov_matrix = jnp.asarray(sigma_v)
         standard_errors = jnp.sqrt(jnp.diag(cov_matrix))
-        params = jnp.asarray(opti_solution.value)
+        params = jnp.asarray(log_fluxes)
 
     alpha = 1 - confidence_level
     z = stats.norm.ppf(1 - alpha / 2)
