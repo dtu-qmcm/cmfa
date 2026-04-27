@@ -4,22 +4,7 @@ from scipy import stats
 
 from cmfa.emu_example import clr_func
 
-
-def flux_vector(parameters: dict, fixed: dict):
-    # parameters = {'v8': ..., 'v2': ..., 'v9': ...}
-    # fixed = {'v1': ..., 'v16': ..., 'v17': ..., ...}
-    v1 = fixed["v1"]
-    v16 = fixed["v16"]
-    v17 = fixed["v17"]
-    v18 = fixed["v18"]
-    v19 = fixed["v19"]
-    v20 = fixed["v20"]
-
-    v8 = parameters["v8"]
-    v2 = parameters["v2"]
-    v9 = parameters["v9"]
-
-    v_free = jnp.array([v8, v1, v19, v20, v16, v17, v18, v2, v9])
+def get_N():
     M_irr = jnp.array(
         [
             [1, -2, -2, -1, -1, -1, 1, 0],
@@ -41,7 +26,24 @@ def flux_vector(parameters: dict, fixed: dict):
 
     i_M = jnp.column_stack((jnp.array([1]), M_rev))
     # Columns correspond to: v8, v1, v19, v20, v16, v17, v18, v2, v9
-    NS = jnp.array(jnp.vstack((jnp.identity(9), z_M, i_M)))
+    ns = jnp.array(jnp.vstack((jnp.identity(9), z_M, i_M)))
+    return ns
+
+def flux_vector(parameters: dict, fixed: dict):
+    # parameters = {'v8': ..., 'v2': ..., 'v9': ...}
+    # fixed = {'v1': ..., 'v16': ..., 'v17': ..., ...}
+    v1 = fixed["v1"]
+    v16 = fixed["v16"]
+    v17 = fixed["v17"]
+    v18 = fixed["v18"]
+    v19 = fixed["v19"]
+    v20 = fixed["v20"]
+
+    v8 = parameters["v8"]
+    v2 = parameters["v2"]
+    v9 = parameters["v9"]
+    NS = get_N()
+    v_free = jnp.array([v8, v1, v19, v20, v16, v17, v18, v2, v9])
     order_values = NS @ v_free
     order_keys = [
         "v8",
@@ -67,6 +69,7 @@ def flux_vector(parameters: dict, fixed: dict):
     ]
     out = dict(zip(order_keys, order_values))
     return out
+
 
 
 def TCA_OpenFLux(parameters: dict, fixed: dict) -> dict:
