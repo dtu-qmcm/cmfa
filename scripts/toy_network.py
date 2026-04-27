@@ -150,8 +150,8 @@ def main():
     entropies = jnp.empty((free_fluxes.shape[0], 1))
     
     key, _ = jax.random.split(key)
-    keys = jax.random.split(key, N_MEASUREMENT_REF) 
-    intensity_msts_ref = simulate_measurements(keys, true_id, SIGMA)
+    keys_ref = jax.random.split(key, N_MEASUREMENT_REF) 
+    intensity_msts_ref = simulate_measurements(keys_ref, true_id, SIGMA)
     id_msts = closure(intensity_msts_ref)
     id_sd_trad = np.std(id_msts, axis=0)
     id_sd_clr = np.std(clr_func(id_msts), axis=0)
@@ -182,8 +182,8 @@ def main():
             flux_ci_ref[m] = flux_ci_ref[m].at[j].set(ci)
 
     for i, free_flux in enumerate(tqdm(free_fluxes)):
-        key, _ = jax.random.split(key)
-        keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
+        main_key, mc_key = jax.random.split(key)
+        keys = jax.random.split(main_key, N_MEASUREMENT_PER_FLUX)
         true_ids = true_ids.at[i].set(SIMULATE_COMPOSITION(free_flux))
         gini_indices = gini_indices.at[i].set(gini_coefficient(true_ids[i]))
         pk = true_ids[i] 
@@ -215,38 +215,83 @@ def main():
                 id_estimates[m] = id_estimates[m].at[i, j].set(id_est)
                 inv_hessian = result.state.f_info.hessian_inv.pytree
                 hessian_matrices[m] = hessian_matrices[m].at[i,j].set(inv_hessian)
-                sigma_v = get_sigma_v(N, inv_hessian)
-                # flux_est_new = jnp.array([flux_est[1], flux_est[3], flux_est[5], flux_est[0], flux_est[2], flux_est[4]])
-                ci = calculate_ci(sigma_v, jnp.log(flux_est))
-                flux_ci[m] = flux_ci[m].at[i,j].set(ci)
+        if jnp.isclose(free_flux, TRUE_FREE_FLUXES).all():
+            N_MONTE_CARLO = 10000
+            mc_keys = jax.random.split(mc_key, N_MONTE_CARLO)
+            mc_msts = simulate_measurements(mc_keys, true_ids[i], SIGMA)
+            mc_id_msts = closure(mc_msts)
+            mc_flux_estimates = {
+                m: jnp.empty((N_MONTE_CARLO, n_flux))
+                for m in ("trad", "clr", "ilr")
+            }
+            mc_id_estimates = {
+                m: jnp.empty((N_MONTE_CARLO, n_comp))
+                for m in ("trad", "clr", "ilr")
+            }
+
+            for mc_i, mc_id_mst in enumerate(mc_id_msts):
+                for m, loss, composition_sd in (
+                    ("trad", loss_trad, id_sd_trad),
+                    ("clr", loss_clr, id_sd_clr),
+                    ("ilr", loss_ilr, id_sd_ilr),
+                ):
+                    result = optimistix.minimise(
+                        loss,
+                        y0=jnp.log(INITIAL_GUESS),
+                        args=(mc_id_mst, 1 / composition_sd),
+                        solver=solver,
+                        max_steps=10000,
+                        throw=False,
+                        has_aux=True,
+                    )
+                    flux_est = flux_from_free(jnp.exp(result.value))[jnp.array([1,3,5,0,2,4])]
+                    id_est = result.aux
+                    mc_flux_estimates[m] = (
+                        mc_flux_estimates[m].at[mc_i].set(flux_est)
+                    )
+                    mc_id_estimates[m] = mc_id_estimates[m].at[mc_i].set(id_est)
+    mc_flux_path = OUTPUT_FOLDER / "monte_carlo_estimated_fluxes.pkl"
+    print(f"Writing {mc_flux_path}...")
+    with open(mc_flux_path, "wb") as f:
+        pickle.dump(mc_flux_estimates, f)
+    
+    mc_id_path = OUTPUT_FOLDER / "monte_carlo_estimated_ids.pkl"
+    print(f"Writing {mc_id_path}...")
+    with open(mc_id_path, "wb") as f:
+        pickle.dump(mc_id_estimates, f)
+    
     flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
         pickle.dump(flux_estimates, f)
+    
     flux_ci_path = OUTPUT_FOLDER / "estimated_fluxes_ci.pkl"
     print(f"Writing {flux_ci_path}...")
     with open(flux_ci_path, "wb") as f:
         pickle.dump(flux_ci, f)
+    
     hessian_matrices_path = OUTPUT_FOLDER / "hessian_matrices.pkl"
     print(f"Writing {hessian_matrices_path}...")
     with open(hessian_matrices_path, "wb") as f:
         pickle.dump(hessian_matrices, f)
+    
     id_estimate_path = OUTPUT_FOLDER / "estimated_ids.pkl"
     print(f"Writing {id_estimate_path}...")
     with open(id_estimate_path, "wb") as f:
         pickle.dump(id_estimates, f)
+    
     intensity_msts_path = OUTPUT_FOLDER / "intensity_measurements.npy"
     print(f"Writing {intensity_msts_path}...")
     jnp.save(intensity_msts_path, intensity_msts)
+    
     free_flux_path = OUTPUT_FOLDER / "free_fluxes.npy"
     print(f"Writing {free_flux_path}...")
     jnp.save(free_flux_path, free_fluxes)
+    
     true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
     print(f"Writing {true_ids_path}...")
     jnp.save(true_ids_path, true_ids)
-    gini_indices_path = OUTPUT_FOLDER / "gini_indices.npy"
-    print(f"Writing {gini_indices_path}...")
-    jnp.save(gini_indices_path, gini_indices)
+    
     entropies_path = OUTPUT_FOLDER / "entropies.npy"
     print(f"Writing {entropies_path}...")
     jnp.save(entropies_path, entropies)
@@ -254,14 +299,17 @@ def main():
     id_msts_path = OUTPUT_FOLDER / "id_simulated_reference.npy"
     print(f"Writing {id_msts_path}...")
     jnp.save(id_msts_path, id_msts)
+    
     flux_estimate_ref_path = OUTPUT_FOLDER / "estimated_fluxes_reference.pkl"
     print(f"Writing {flux_estimate_ref_path}...")
     with open(flux_estimate_ref_path, "wb") as f:
         pickle.dump(flux_estimates_ref, f)
+    
     flux_ci_ref_path = OUTPUT_FOLDER / "estimated_fluxes_ci_reference.pkl"
     print(f"Writing {flux_ci_ref_path}...")
     with open(flux_ci_ref_path, "wb") as f:
         pickle.dump(flux_ci_ref, f)
+    
     id_estimate_ref_path = OUTPUT_FOLDER / "estimated_ids_reference.pkl"
     print(f"Writing {id_estimate_ref_path}...")
     with open(id_estimate_ref_path, "wb") as f:
