@@ -11,6 +11,8 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
+import pdb
+
 from cmfa.emu_example import clr_func, simple_net, ordered_ilr_func, closure, calculate_ci, gini_coefficient
 
 jax.config.update("jax_enable_x64", True)
@@ -27,9 +29,10 @@ FREE_FLUX_GRID_SIZE = [11, 11]
 IX_INPUT_FLUX = np.array([0])
 IX_FREE_FLUXES = np.array([2, 4])
 IX_FIXED_FLUXES = np.array([1, 3, 5])
-TOTAL_MOL = 1e5
 SIGMA = 0.1
 N_MEASUREMENT_PER_FLUX = 50
+N_MEASUREMENT_REF = 1000
+
 INITIAL_GUESS = jnp.array([100, 50])
 SIMULATE_COMPOSITION = partial(simple_net, v1=KNOWN_FLUXES[0].item())
 SEED = 1234
@@ -77,7 +80,9 @@ def loss_ilr(log_free_flux, args):
     ), composition
 
 def get_sigma_v(N, inv_hessian):
-    return N @ inv_hessian @ N.T
+    n_nofixed = jnp.delete(N, IX_INPUT_FLUX, axis=1)
+    # jax.debug.breakpoint()
+    return n_nofixed @ inv_hessian @ n_nofixed.T
 
 def main():
     flux_from_free = partial(
@@ -107,12 +112,26 @@ def main():
     free_fluxes = jnp.array(list(product(*flux_ranges)))
     n_free_flux = len(IX_FREE_FLUXES)
     key = jax.random.key(seed=SEED)
+
+    flux_estimates_ref = {
+        model: jnp.empty((N_MEASUREMENT_REF, n_flux))
+        for model in ("trad", "clr", "ilr")
+    }
+    flux_ci_ref = {
+        model: jnp.empty((N_MEASUREMENT_REF, n_flux, 2))
+        for model in ("trad", "clr", "ilr")
+    }
+    id_estimates_ref = {
+        model: jnp.empty((N_MEASUREMENT_REF, n_comp))
+        for model in ("trad", "clr", "ilr")
+    }
+
     flux_estimates = {
         model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_flux))
         for model in ("trad", "clr", "ilr")
     }
     flux_ci = {
-        model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, 2, n_free_flux))
+        model: jnp.empty((len(free_fluxes), N_MEASUREMENT_PER_FLUX, n_flux, 2))
         for model in ("trad", "clr", "ilr")
     }
     hessian_matrices = {
@@ -129,6 +148,39 @@ def main():
     true_ids = jnp.empty((free_fluxes.shape[0], n_comp))
     gini_indices = jnp.empty((free_fluxes.shape[0], 1))
     entropies = jnp.empty((free_fluxes.shape[0], 1))
+    
+    key, _ = jax.random.split(key)
+    keys = jax.random.split(key, N_MEASUREMENT_REF) 
+    intensity_msts_ref = simulate_measurements(keys, true_id, SIGMA)
+    id_msts = closure(intensity_msts_ref)
+    id_sd_trad = np.std(id_msts, axis=0)
+    id_sd_clr = np.std(clr_func(id_msts), axis=0)
+    id_sd_ilr = np.std(ordered_ilr_func(id_msts), axis=0)
+    for j, mst in enumerate(tqdm(id_msts)):
+        for m, loss, composition_sd in (
+            ("trad", loss_trad, id_sd_trad),
+            ("clr", loss_clr, id_sd_clr),
+            ("ilr", loss_ilr, id_sd_ilr),
+        ):
+            result = optimistix.minimise(
+                loss,
+                y0=jnp.log(INITIAL_GUESS),
+                args=(mst, 1 / composition_sd),
+                solver=solver,
+                max_steps=10000,
+                throw=False,
+                has_aux=True,
+            )
+            flux_est = flux_from_free(jnp.exp(result.value))[jnp.array([1,3,5,0,2,4])]
+            id_est = result.aux
+            flux_estimates_ref[m] = flux_estimates_ref[m].at[j].set(flux_est)
+            id_estimates_ref[m] = id_estimates_ref[m].at[j].set(id_est)
+            inv_hessian = result.state.f_info.hessian_inv.pytree
+            sigma_v = get_sigma_v(N, inv_hessian)
+            # flux_est_new = jnp.array([flux_est[1], flux_est[3], flux_est[5], flux_est[0], flux_est[2], flux_est[4]])
+            ci = calculate_ci(sigma_v, jnp.log(flux_est))
+            flux_ci_ref[m] = flux_ci_ref[m].at[j].set(ci)
+
     for i, free_flux in enumerate(tqdm(free_fluxes)):
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX) 
@@ -157,14 +209,16 @@ def main():
                     throw=False,
                     has_aux=True,
                 )
-                flux_est = flux_from_free(jnp.exp(result.value))
+                flux_est = flux_from_free(jnp.exp(result.value))[jnp.array([1,3,5,0,2,4])]
                 id_est = result.aux
                 flux_estimates[m] = flux_estimates[m].at[i, j].set(flux_est)
                 id_estimates[m] = id_estimates[m].at[i, j].set(id_est)
                 inv_hessian = result.state.f_info.hessian_inv.pytree
                 hessian_matrices[m] = hessian_matrices[m].at[i,j].set(inv_hessian)
-                # sigma_v = get_sigma_v(N, inv_hessian)
-                flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(inv_hessian, result.value))   
+                sigma_v = get_sigma_v(N, inv_hessian)
+                # flux_est_new = jnp.array([flux_est[1], flux_est[3], flux_est[5], flux_est[0], flux_est[2], flux_est[4]])
+                ci = calculate_ci(sigma_v, jnp.log(flux_est))
+                flux_ci[m] = flux_ci[m].at[i,j].set(ci)
     flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
     print(f"Writing {flux_estimate_path}...")
     with open(flux_estimate_path, "wb") as f:
@@ -196,6 +250,22 @@ def main():
     entropies_path = OUTPUT_FOLDER / "entropies.npy"
     print(f"Writing {entropies_path}...")
     jnp.save(entropies_path, entropies)
+
+    id_msts_path = OUTPUT_FOLDER / "id_simulated_reference.npy"
+    print(f"Writing {id_msts_path}...")
+    jnp.save(id_msts_path, id_msts)
+    flux_estimate_ref_path = OUTPUT_FOLDER / "estimated_fluxes_reference.pkl"
+    print(f"Writing {flux_estimate_ref_path}...")
+    with open(flux_estimate_ref_path, "wb") as f:
+        pickle.dump(flux_estimates_ref, f)
+    flux_ci_ref_path = OUTPUT_FOLDER / "estimated_fluxes_ci_reference.pkl"
+    print(f"Writing {flux_ci_ref_path}...")
+    with open(flux_ci_ref_path, "wb") as f:
+        pickle.dump(flux_ci_ref, f)
+    id_estimate_ref_path = OUTPUT_FOLDER / "estimated_ids_reference.pkl"
+    print(f"Writing {id_estimate_ref_path}...")
+    with open(id_estimate_ref_path, "wb") as f:
+        pickle.dump(id_estimates_ref, f)
 
 
 
