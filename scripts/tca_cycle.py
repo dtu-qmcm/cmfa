@@ -186,7 +186,7 @@ def main():
             id_estimates_ref[m][j]=id_est
             inv_hessian = result.state.f_info.hessian_inv.pytree
             sigma_v = get_sigma_v(N, inv_hessian)
-            flux_est_jax = jnp.array(jax.tree.leaves(flux_est))
+            flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
             flux_ci_i = calculate_ci(sigma_v, jnp.log(flux_est_jax))
             flux_ci_ref[m] = flux_ci_ref[m].at[j].set(flux_ci_i)
 
@@ -226,7 +226,7 @@ def main():
                 id_estimates[m][i][j]=id_est
                 inv_hessian = result.state.f_info.hessian_inv.pytree
                 sigma_v = get_sigma_v(N, inv_hessian)
-                flux_est_jax = jnp.array(jax.tree.leaves(flux_est))
+                flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
                 flux_ci_i = calculate_ci(sigma_v, jnp.log(flux_est_jax))
                 flux_ci[m] = flux_ci[m].at[i,j].set(flux_ci_i)
                 # hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)
