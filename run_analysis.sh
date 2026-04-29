@@ -7,7 +7,6 @@ echo "Starting analysis..."
 echo "Step 1: Running scripts..."
 uv run scripts/simplex_plot.py
 uv run scripts/toy_network.py
-uv run scripts/toy_network_reference.py
 uv run scripts/tca_cycle.py
 
 echo "Step 2: Executing notebooks..."
@@ -24,6 +23,7 @@ uv run jupyter execute notebooks/figure_1_creation.ipynb
 uv run jupyter execute notebooks/toy_example.ipynb
 # uv run jupyter execute notebooks/unconstrained_coda_comparison.ipynb # fails (missing objective_ilr_wssr, objective_leave_one_out_wssr)
 uv run jupyter execute notebooks/tca_cycle.ipynb
+uv run jupyter execute notebooks/mse_diff_plot.ipynb
 
 echo "Analysis pipeline completed successfully!"
 
