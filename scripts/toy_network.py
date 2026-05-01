@@ -41,7 +41,7 @@ IX_FREE_FLUXES = np.array([2, 4])
 IX_FIXED_FLUXES = np.array([1, 3, 5])
 SIGMA = 0.1
 M_MST_PER_GRID_CELL = 50
-N_MST_REF = 1000
+N_MST_REF = 10000
 
 INITIAL_GUESS = jnp.array([100, 50])
 SIMULATE_COMPOSITION = partial(simple_net, v1=KNOWN_FLUXES[0].item())
