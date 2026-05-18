@@ -71,7 +71,9 @@ simulate_measurements = jax.vmap(simulate_measurement, in_axes=(0, None, None))
 
 def wssr(y, args):
     target, weights = args
-    return jnp.sum(weights * (y - target) ** 2)
+    n_dim = target.shape[0]
+    ys = jnp.tile(y, (n_dim, 1))
+    return jnp.sum(weights * (ys - target) ** 2)
 
 
 def loss_trad(log_free_flux, args):
@@ -130,12 +132,13 @@ def main():
         )
         log_free_flux_est = result.value
         id_est = result.aux
+        fval = float(result.state.f_info.f)
         free_flux_est = jnp.exp(log_free_flux_est)
         flux_est = expand_free_fluxes(free_flux_est)[corrected_index]
         inv_hessian = result.state.f_info.hessian_inv.pytree
         sigma_v = get_sigma_v(N, inv_hessian)
         ci = calculate_ci(sigma_v, jnp.log(flux_est))
-        return flux_est, id_est, ci, inv_hessian
+        return flux_est, id_est, ci, fval
 
     model_to_loss = {"trad": loss_trad, "clr": loss_clr, "ilr": loss_ilr}
 
@@ -159,6 +162,7 @@ def main():
     flux_est_ref = empties((N_MST_REF, n_flux))
     flux_ci_ref = empties((N_MST_REF, n_flux, 2))
     id_est_ref = empties((N_MST_REF, n_comp))
+    fval_ref = empties((N_MST_REF, 1))
     flux_est_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux))
     flux_ci_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux, 2))
     hessian_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_free, n_free))
@@ -186,10 +190,11 @@ def main():
         for mod in ("trad", "clr", "ilr"):
             loss = model_to_loss[mod]
             composition_sd = id_sds_ref[mod]
-            flux_est, id_est, ci, _ = fit(mst, loss, composition_sd)
+            flux_est, id_est, ci, fval = fit(mst, loss, composition_sd)
             flux_est_ref[mod] = flux_est_ref[mod].at[j].set(flux_est)
             id_est_ref[mod] = id_est_ref[mod].at[j].set(id_est)
             flux_ci_ref[mod] = flux_ci_ref[mod].at[j].set(ci)
+            fval_ref[mod] = fval_ref[mod].at[j].set(fval)
 
     # fit each free flux combination in the grid N_MST_PER_FLUX times
     keys_grid = jax.random.split(key_grid, n_grid)
@@ -227,6 +232,7 @@ def main():
         (flux_est_ref, "estimated_fluxes_reference.pkl"),
         (flux_ci_ref, "estimated_fluxes_ci_reference.pkl"),
         (id_est_ref, "estimated_ids_reference.pkl"),
+        (fval_ref, "fvalues_reference.pkl")
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")
