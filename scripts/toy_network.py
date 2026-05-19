@@ -71,8 +71,11 @@ simulate_measurements = jax.vmap(simulate_measurement, in_axes=(0, None, None))
 
 def wssr(y, args):
     target, weights = args
-    n_dim = target.shape[0]
-    ys = jnp.tile(y, (n_dim, 1))
+    if target.ndim>1:   
+        n_dim = target.shape[0]
+        ys = jnp.tile(y, (n_dim, 1))
+    else:
+        ys=y
     return jnp.sum(weights * (ys - target) ** 2)
 
 
