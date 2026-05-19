@@ -29,7 +29,7 @@ def get_N():
     ns = jnp.array(jnp.vstack((jnp.identity(9), z_M, i_M)))
     return ns
 
-def flux_vector(parameters: dict, fixed: dict):
+def flux_vector(parameters, fixed: dict):
     # parameters = {'v8': ..., 'v2': ..., 'v9': ...}
     # fixed = {'v1': ..., 'v16': ..., 'v17': ..., ...}
     v1 = fixed["v1"]
@@ -39,9 +39,9 @@ def flux_vector(parameters: dict, fixed: dict):
     v19 = fixed["v19"]
     v20 = fixed["v20"]
 
-    v8 = parameters["v8"]
-    v2 = parameters["v2"]
-    v9 = parameters["v9"]
+    v8 = parameters[0]
+    v2 = parameters[1]
+    v9 = parameters[2]
     NS = get_N()
     v_free = jnp.array([v8, v1, v19, v20, v16, v17, v18, v2, v9])
     order_values = NS @ v_free
@@ -72,7 +72,8 @@ def flux_vector(parameters: dict, fixed: dict):
 
 
 
-def TCA_OpenFLux(parameters: dict, fixed: dict) -> dict:
+def TCA_OpenFLux(parameters, fixed: dict) -> dict:
+    parameters_dict = {"v8": parameters[0], "v2": parameters[1], "v9": parameters[2]}
     v = flux_vector(parameters=parameters, fixed=fixed)
     names = [
         "v1",

@@ -24,15 +24,16 @@ KNOWN_KEYS = ["v1", "v16", "v17", "v18", "v19", "v20"]
 KNOWN_FLUXES = {k: V_FREE[k] for k in KNOWN_KEYS}
 FREE_KEYS = ["v8", "v2", "v9"]
 N = get_N()
-TRUE_FREE_FLUXES = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
+TRUE_FREE_FLUXES_DICT = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
+TRUE_FREE_FLUXES = jnp.array([0.215, 0.201, 0.296])
 # FREE_FLUX_RANGE = [[0.115, 0.315], [0.101, 0.301], [0.196, 0.396]]
-FREE_FLUX_RANGE = [[0.5 * v, 1.5 * v] for v in TRUE_FREE_FLUXES.values()]
+FREE_FLUX_RANGE = [[0.5 * v, 1.5 * v] for v in TRUE_FREE_FLUXES_DICT.values()]
 FREE_FLUX_GRID_SIZE = [5,5,5]
 TOTAL_MOL = 1
 SIGMA = 0.1
-N_MEASUREMENT_PER_FLUX = 50
-N_MEASUREMENT_REF = 10000
-INITIAL_GUESS = {'v8': 0.2, 'v2': 0.2, 'v9': 0.2}
+N_MEASUREMENT_PER_FLUX = 10
+N_MEASUREMENT_REF = 100
+INITIAL_GUESS = jnp.array([0.2, 0.2, 0.2])
 SIMULATE_COMPOSITION = partial(TCA_OpenFLux, fixed=KNOWN_FLUXES)
 SEED = 1234
 
@@ -59,12 +60,12 @@ def wssr(y, args):
 
 
 def loss_trad(log_free_flux, args):
-    composition = SIMULATE_COMPOSITION(jax.tree.map(lambda x: jnp.exp(x), log_free_flux))
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
     return wssr(composition, args), composition
 
 
 def loss_clr(log_free_flux, args):
-    composition = SIMULATE_COMPOSITION(jax.tree.map(lambda x: jnp.exp(x), log_free_flux))
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
     target, weights = args
     return wssr(
         jax.tree.map(lambda x: clr_func(x), composition), 
@@ -73,7 +74,7 @@ def loss_clr(log_free_flux, args):
 
 
 def loss_ilr(log_free_flux, args):
-    composition = SIMULATE_COMPOSITION(jax.tree.map(lambda x: jnp.exp(x), log_free_flux))
+    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
     target, weights = args
     return wssr(
         jax.tree.map(lambda x: ordered_ilr_func(x),composition), 
@@ -82,11 +83,11 @@ def loss_ilr(log_free_flux, args):
 
 # flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(inv_hessian, result.value))
 def get_sigma_v(n, inv_hessian):
-    order = ['v8', 'v2', 'v9']
-    matrix_list = [[inv_hessian[row][col] for col in order] for row in order]
-    inv_hessian_jax = jnp.array(matrix_list)
+    # order = ['v8', 'v2', 'v9']
+    # matrix_list = [[inv_hessian[row][col] for col in order] for row in order]
+    # inv_hessian_jax = jnp.array(matrix_list)
     n_nofixed = jnp.delete(n, np.array([1,2,3,4,5,6]), axis=1)
-    return n_nofixed @ inv_hessian_jax @ n_nofixed.T
+    return n_nofixed @ inv_hessian @ n_nofixed.T
 
 def main():
     flux_from_free = partial(
@@ -162,6 +163,7 @@ def main():
     id_sd_clr = jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_ref)
     id_sd_ilr = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_ref)
 
+
     for j in range(N_MEASUREMENT_REF):
         mst_j = jax.tree.map(lambda x: x[j], id_msts_ref)
         for m, loss, sd_tree in (
@@ -171,14 +173,14 @@ def main():
         ):
             result = optimistix.minimise(
                 loss,
-                y0=jax.tree.map(lambda x: jnp.log(x), INITIAL_GUESS),
+                y0=jnp.log(INITIAL_GUESS),
                 args=(mst_j, jax.tree.map(lambda s: 1/s, sd_tree)),
                 solver=solver,
                 max_steps=10000,
                 throw=False,
                 has_aux=True,
             )
-            flux_est = flux_from_free(jax.tree.map(lambda x: jnp.exp(x), result.value))
+            flux_est = flux_from_free(jnp.exp(result.value))
             id_est = result.aux
             free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
             flux_estimates_ref[m] = flux_estimates_ref[m].at[j].set(free_flux_est)
@@ -194,8 +196,8 @@ def main():
         key, _ = jax.random.split(key)
         keys = jax.random.split(key, N_MEASUREMENT_PER_FLUX)
         free_flux_dict = {k: float(v) for k, v in zip(FREE_KEYS, free_flux)}
-        true_ids.append(SIMULATE_COMPOSITION(free_flux_dict))
-        entropies.append(jax.tree.map(lambda x: entropy(pk=x), true_ids[i]))
+        true_ids.append(SIMULATE_COMPOSITION(free_flux))
+        # entropies.append(jax.tree.map(lambda x: entropy(pk=x), true_ids[i]))
         intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
         intensity_msts.append(intensity_msts_i)
         id_msts_i = jax.tree.map(jax.vmap(closure), intensity_msts_i)
@@ -211,14 +213,14 @@ def main():
             ):
                 result = optimistix.minimise(
                     loss,
-                    y0=jax.tree.map(lambda x: jnp.log(x), INITIAL_GUESS),
+                    y0=jnp.log(INITIAL_GUESS),
                     args=(mst_j, jax.tree.map(lambda s: 1/s, sd_tree)),
                     solver=solver,
                     max_steps=10000,
                     throw=False,
                     has_aux=True,
                 )
-                flux_est = flux_from_free(jax.tree.map(lambda x: jnp.exp(x), result.value))
+                flux_est = flux_from_free(jnp.exp(result.value))
                 id_est = result.aux
                 free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
                 flux_estimates[m] = flux_estimates[m].at[i, j].set(free_flux_est)
