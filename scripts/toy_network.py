@@ -12,13 +12,14 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import (
+from cmfa.emu_example import simple_net
+
+from cmfa.opti_functions import (
     clr_func,
-    simple_net,
     ordered_ilr_func,
     closure,
     calculate_ci,
-    gini_coefficient,
+    profile_likelihood,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -170,8 +171,10 @@ def main():
     flux_est_ref = empties((N_MST_REF, n_flux))
     flux_ci_ref = empties((N_MST_REF, n_flux, 2))
     id_est_ref = empties((N_MST_REF, n_comp))
-    fval_ref = empties((N_MST_REF, 1))
+    fval_ref = empties((N_MST_REF))
     flux_sd_est = empties((N_MST_REF, n_flux))
+    ci_fisher = empties(())
+    ci_profile = empties(())
     flux_est_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux))
     flux_ci_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux, 2))
     hessian_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_free, n_free))
@@ -179,7 +182,6 @@ def main():
     intensity_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
     id_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
     true_ids_grid = jnp.empty((n_grid, n_comp))
-    gini_indices_grid = jnp.empty((n_grid, 1))
     entropies_grid = jnp.empty((n_grid, 1))
 
     # get keys
@@ -195,6 +197,26 @@ def main():
         "clr": np.std(clr_func(id_msts_ref), axis=0),
         "ilr": np.std(ordered_ilr_func(id_msts_ref), axis=0),
     }
+    for mod in ("trad", "clr", "ilr"):
+        _,_,ci,_,_,_ = fit(true_id, model_to_loss[mod], id_sds_ref[mod])
+        ci_fisher[mod] = ci
+    for mod in ("trad", "clr", "ilr"):
+        flux_est,_,_,_,fval,_ = fit(true_id, model_to_loss[mod], id_sds_ref[mod])
+        flux_est_free = flux_est[np.array([4,5])]
+        x_names=["v3", "v5"]
+        lb=[-6]*2
+        ub=[6]*2
+        _, ci_pro = profile_likelihood(model_to_loss[mod],
+                                   true_id,
+                                   id_sds_ref[mod],
+                                   flux_est_free,
+                                   fval,
+                                   x_names,
+                                   lb,
+                                   ub,
+                                   )
+        pdb.set_trace()
+
     for j, mst in enumerate(tqdm(id_msts_ref)):
         for mod in ("trad", "clr", "ilr"):
             loss = model_to_loss[mod]
@@ -211,13 +233,11 @@ def main():
     for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
         keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
         true_id_i = SIMULATE_COMPOSITION(free_flux)
-        gini_coef = gini_coefficient(true_id_i)
         intensity_msts_i = simulate_measurements(keys_i, true_id_i, SIGMA)
         id_msts_i = closure(intensity_msts_i)
         id_msts_grid = id_msts_grid.at[i].set(id_msts_i)
         intensity_msts_grid = intensity_msts_grid.at[i].set(intensity_msts_i)
         true_ids_grid = true_ids_grid.at[i].set(true_id_i)
-        gini_indices_grid = gini_indices_grid.at[i].set(gini_coef)
         entropies_grid = entropies_grid.at[i].set(entropy(pk=true_id_i))
         id_sds_i = {
             "trad": np.std(id_msts_i, axis=0),
@@ -244,6 +264,7 @@ def main():
         (id_est_ref, "estimated_ids_reference.pkl"),
         (fval_ref, "fvalues_reference.pkl"),
         (flux_sd_est, "estimated_fluxes_sd_reference.pkl"),
+        (ci_fisher, "fisher_estimated_ci.pkl"),
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")
