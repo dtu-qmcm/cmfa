@@ -26,7 +26,6 @@ FREE_KEYS = ["v8", "v2", "v9"]
 N = get_N()
 TRUE_FREE_FLUXES_DICT = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
 TRUE_FREE_FLUXES = jnp.array([0.215, 0.201, 0.296])
-# FREE_FLUX_RANGE = [[0.115, 0.315], [0.101, 0.301], [0.196, 0.396]]
 FREE_FLUX_RANGE = [[0.5 * v, 1.5 * v] for v in TRUE_FREE_FLUXES_DICT.values()]
 FREE_FLUX_GRID_SIZE = [5,5,5]
 TOTAL_MOL = 1

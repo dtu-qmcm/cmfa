@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from scipy import stats
 
-from cmfa.emu_example import clr_func
+from cmfa.functions import clr_func
 
 def get_N():
     M_irr = jnp.array(
