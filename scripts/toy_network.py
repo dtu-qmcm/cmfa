@@ -12,14 +12,15 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import (
+from cmfa.emu_example import simple_net
+
+from cmfa.functions import (
     clr_func,
-    simple_net,
     ordered_ilr_func,
     closure,
     calculate_ci,
-    gini_coefficient,
 )
+
 
 jax.config.update("jax_enable_x64", True)
 
@@ -179,7 +180,6 @@ def main():
     intensity_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
     id_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
     true_ids_grid = jnp.empty((n_grid, n_comp))
-    gini_indices_grid = jnp.empty((n_grid, 1))
     entropies_grid = jnp.empty((n_grid, 1))
 
     # get keys
@@ -211,13 +211,11 @@ def main():
     for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
         keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
         true_id_i = SIMULATE_COMPOSITION(free_flux)
-        gini_coef = gini_coefficient(true_id_i)
         intensity_msts_i = simulate_measurements(keys_i, true_id_i, SIGMA)
         id_msts_i = closure(intensity_msts_i)
         id_msts_grid = id_msts_grid.at[i].set(id_msts_i)
         intensity_msts_grid = intensity_msts_grid.at[i].set(intensity_msts_i)
         true_ids_grid = true_ids_grid.at[i].set(true_id_i)
-        gini_indices_grid = gini_indices_grid.at[i].set(gini_coef)
         entropies_grid = entropies_grid.at[i].set(entropy(pk=true_id_i))
         id_sds_i = {
             "trad": np.std(id_msts_i, axis=0),

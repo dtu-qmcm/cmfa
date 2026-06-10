@@ -12,7 +12,7 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import clr_func, ordered_ilr_func, closure, calculate_ci, gini_coefficient
+from cmfa.functions import clr_func, ordered_ilr_func, closure, calculate_ci
 from cmfa.tca_openflux import TCA_OpenFLux, flux_vector, get_N
 
 jax.config.update("jax_enable_x64", True)
