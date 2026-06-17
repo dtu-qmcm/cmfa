@@ -76,8 +76,8 @@ opt_result_ilr_toy = optimistix.minimise(
     has_aux=True,
 )
 
-lb_toy=[-8] * 2, 
-ub_toy=[16] * 2,  
+lb_toy=[-7] * 2, 
+ub_toy=[7] * 2,  
 x_names_toy=['v3', 'v5']
 
 result_trad_toy, ci_trad_profile_toy = profile_likelihood(toy_network.loss_trad, true_mid_toy, sd_trad_toy, np.exp(opt_result_trad_toy.value), opt_result_trad_toy.state.f_info.f, x_names_toy, lb_toy, ub_toy)
@@ -128,8 +128,8 @@ opt_result_ilr_tca = optimistix.minimise(
     has_aux=True,
 )
 
-lb_tca = [-8] * 3, 
-ub_tca = [6] * 3,  
+lb_tca = [-7] * 3, 
+ub_tca = [7] * 3,  
 x_names_tca = ['v8', 'v2', "v9"]
 
 result_trad_tca, ci_tca_profile_trad = profile_likelihood(tca_cycle.loss_trad, true_mid_tca, sd_trad_tca, np.exp(opt_result_trad_tca.value), opt_result_trad_tca.state.f_info.f, x_names_tca, lb_tca, ub_tca, use_jax_weights=True)
