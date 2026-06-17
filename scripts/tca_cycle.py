@@ -122,6 +122,7 @@ def main():
     key = jax.random.key(seed=SEED)
 
     flux_est_ref = empties((N_MST_REF, n_free_flux))
+    flux_est_full = empties((N_MST_REF, n_flux))
     flux_ci_ref = empties((N_MST_REF, 20, 2))
     flux_sd_ref = empties((N_MST_REF, 20))
     fval_ref = empties((N_MST_REF))
@@ -181,6 +182,7 @@ def main():
                 has_aux=True,
             )
             flux_est = flux_from_free(jnp.exp(result.value))
+
             id_est = result.aux
             free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
             flux_est_ref[m] = flux_est_ref[m].at[j].set(free_flux_est)
@@ -189,6 +191,7 @@ def main():
             inv_hessian = result.state.f_info.hessian_inv.pytree
             sigma_v = get_sigma_v(N, inv_hessian)
             flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
+            flux_est_full[m] = flux_est_full[m].at[j].set(flux_est_jax)
             flux_ci_i = calculate_ci(sigma_v, jnp.log(flux_est_jax))
             flux_ci_ref[m] = flux_ci_ref[m].at[j].set(flux_ci_i)
             flux_sd_ref_i = jnp.sqrt(jnp.diag(sigma_v))
@@ -274,6 +277,7 @@ def main():
       
     for obj, filename in (
         (flux_est_ref, "estimated_fluxes_reference.pkl"),
+        (flux_est_full, "estimated_fluxes_full.pkl"),
         (flux_ci_ref, "estimated_fluxes_ci_reference.pkl"),
         (id_est_ref, "estimated_ids_reference.pkl"),
         (fval_ref, "fvalues_reference.pkl"),
