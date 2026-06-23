@@ -4,8 +4,6 @@ from itertools import product
 from pathlib import Path
 from functools import partial
 
-from scipy.stats import entropy
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -24,29 +22,31 @@ KNOWN_KEYS = ["v1", "v16", "v17", "v18", "v19", "v20"]
 KNOWN_FLUXES = {k: V_FREE[k] for k in KNOWN_KEYS}
 FREE_KEYS = ["v8", "v2", "v9"]
 N = get_N()
-TRUE_FREE_FLUXES_DICT = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}  
+TRUE_FREE_FLUXES_DICT = {k: v for k, v in V_FREE.items() if k not in KNOWN_KEYS}
 TRUE_FREE_FLUXES = jnp.array([0.215, 0.201, 0.296])
 FREE_FLUX_RANGE = [[0.5 * v, 1.5 * v] for v in TRUE_FREE_FLUXES_DICT.values()]
-FREE_FLUX_GRID_SIZE = [5,5,5]
-TOTAL_MOL = 1
+FREE_FLUX_GRID_SIZE = [5, 5, 5]
 SIGMA = 0.1
-N_MST_PER_GRID_CELL = 50
+M_MST_PER_GRID_CELL = 50
 N_MST_REF = 10000
 INITIAL_GUESS = jnp.array([0.2, 0.2, 0.2])
 SIMULATE_COMPOSITION = partial(TCA_OpenFLux, fixed=KNOWN_FLUXES)
 SEED = 1234
 
+
 def simulate_measurement(key, yhat, sigma):
     key, _ = jax.random.split(key)
     key_tree = dict(zip(yhat.keys(), jax.random.split(key, len(yhat))))
     log_mst = jax.tree.map(
-        lambda mean, key: 
-            jnp.log(mean)+jax.random.normal(key, shape=mean.shape) * sigma, 
+        lambda mean, key:
+            jnp.log(mean) + jax.random.normal(key, shape=mean.shape) * sigma,
             yhat,
             key_tree)
     return jax.tree.map(lambda x: jnp.exp(x), log_mst)
 
+
 simulate_measurements = jax.vmap(simulate_measurement, in_axes=(0, None, None))
+
 
 def wssr(y, args):
     target, weights = args
@@ -67,26 +67,31 @@ def loss_clr(log_free_flux, args):
     composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
     target, weights = args
     return wssr(
-        jax.tree.map(lambda x: clr_func(x), composition), 
+        jax.tree.map(lambda x: clr_func(x), composition),
         (jax.tree.map(lambda x: clr_func(x), target), weights)
-        ), composition
+    ), composition
 
 
 def loss_ilr(log_free_flux, args):
     composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
     target, weights = args
     return wssr(
-        jax.tree.map(lambda x: ordered_ilr_func(x),composition), 
+        jax.tree.map(lambda x: ordered_ilr_func(x), composition),
         (jax.tree.map(lambda x: ordered_ilr_func(x), target), weights)
     ), composition
 
-# flux_ci[m] = flux_ci[m].at[i,j].set(calculate_ci(inv_hessian, result.value))
+
 def get_sigma_v(n, inv_hessian):
-    # order = ['v8', 'v2', 'v9']
-    # matrix_list = [[inv_hessian[row][col] for col in order] for row in order]
-    # inv_hessian_jax = jnp.array(matrix_list)
-    n_nofixed = jnp.delete(n, np.array([1,2,3,4,5,6]), axis=1)
+    n_nofixed = jnp.delete(n, np.array([1, 2, 3, 4, 5, 6]), axis=1)
     return n_nofixed @ inv_hessian @ n_nofixed.T
+
+
+def get_flux_grid(limits, sizes):
+    values = (
+        np.linspace(low, high, size) for (low, high), size in zip(limits, sizes)
+    )
+    return jnp.array(list(product(*values)))
+
 
 def main():
     flux_from_free = partial(
@@ -96,193 +101,120 @@ def main():
 
     def empties(shape):
         return {model: jnp.empty(shape) for model in ("trad", "clr", "ilr")}
-    
+
+    def fit(mst, loss, sd):
+        result = optimistix.minimise(
+            loss,
+            y0=jnp.log(INITIAL_GUESS),
+            args=(mst, jax.tree.map(lambda s: 1 / s, sd)),
+            solver=solver,
+            max_steps=10000,
+            throw=False,
+            has_aux=True,
+        )
+        id_est = result.aux
+        free_flux_est_arr = jnp.exp(result.value)
+        flux_est = flux_from_free(free_flux_est_arr)
+        flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
+        free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
+        inv_hessian = result.state.f_info.hessian_inv.pytree
+        sigma_v = get_sigma_v(N, inv_hessian)
+        flux_sd = jnp.sqrt(jnp.diag(sigma_v))
+        ci = calculate_ci(sigma_v, jnp.log(flux_est_jax))
+        fval = float(result.state.f_info.f)
+        return free_flux_est, flux_est_jax, id_est, ci, inv_hessian, fval, flux_sd
+
+    model_to_loss = {"trad": loss_trad, "clr": loss_clr, "ilr": loss_ilr}
+
     solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
     true_flux = flux_from_free(TRUE_FREE_FLUXES)
-
     true_id = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
-    true_flux_file = OUTPUT_FOLDER / "true_flux.npy"
     n_flux = len(true_flux)
-    n_comp = sum(v.size for v in true_id.values())
-
-    true_composition_file = OUTPUT_FOLDER / "true_composition.npy"
+    n_free_flux = len(TRUE_FREE_FLUXES)
     print(f"True flux: {true_flux}")
     print(f"True composition: {true_id}")
-    print(f"Writing {true_flux_file}...")
-    np.save(true_flux_file, true_flux)
-    print(f"Writing {true_composition_file}...")
-    np.save(true_composition_file, true_id)
-    flux_ranges = [
-        np.linspace(range_i[0], range_i[1], grid_size_i)
-        for range_i, grid_size_i in zip(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
-    ]
-    free_fluxes = jnp.array(list(product(*flux_ranges)))
+    print(f"Writing {OUTPUT_FOLDER / 'true_flux.npy'}...")
+    np.save(OUTPUT_FOLDER / "true_flux.npy", true_flux)
+    print(f"Writing {OUTPUT_FOLDER / 'true_composition.npy'}...")
+    np.save(OUTPUT_FOLDER / "true_composition.npy", true_id)
 
-    n_free_flux = len(TRUE_FREE_FLUXES)
+    flux_grid = get_flux_grid(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
+    n_grid = len(flux_grid)
     key = jax.random.key(seed=SEED)
 
+    # initialise containers
     flux_est_ref = empties((N_MST_REF, n_free_flux))
     flux_est_full = empties((N_MST_REF, n_flux))
-    flux_ci_ref = empties((N_MST_REF, 20, 2))
-    flux_sd_ref = empties((N_MST_REF, 20))
-    fval_ref = empties((N_MST_REF))
-
-    id_est_ref = {
-        model: [0 for _ in range(N_MST_REF)]
-        for model in ("trad", "clr", "ilr")
-    }
-
-    flux_estimates = {
-        model: jnp.empty((len(free_fluxes), N_MST_PER_GRID_CELL, n_free_flux))
-        for model in ("trad", "clr", "ilr")
-    }
-
-    flux_ci = {
-        model: jnp.empty((len(free_fluxes), N_MST_PER_GRID_CELL, 20, 2))
-        for model in ("trad", "clr", "ilr")
-    }
-    hessian_matrices = {
-        model: []
-        for model in ("trad", "clr", "ilr")
-    }
-
+    flux_ci_ref = empties((N_MST_REF, n_flux, 2))
+    flux_sd_ref = empties((N_MST_REF, n_flux))
+    fval_ref = empties((N_MST_REF,))
+    id_est_ref = {model: [0 for _ in range(N_MST_REF)] for model in ("trad", "clr", "ilr")}
+    flux_estimates = empties((n_grid, M_MST_PER_GRID_CELL, n_free_flux))
+    flux_ci = empties((n_grid, M_MST_PER_GRID_CELL, n_flux, 2))
     id_estimates = {
-        model: [[0 for _ in range(N_MST_PER_GRID_CELL)] for _ in range(len(free_fluxes))]
+        model: [[0 for _ in range(M_MST_PER_GRID_CELL)] for _ in range(n_grid)]
         for model in ("trad", "clr", "ilr")
     }
     true_ids = []
-    intensity_msts = []
-    entropies = []
+    intensity_msts_grid = []
 
-    key, _ = jax.random.split(key)
-    keys = jax.random.split(key, N_MST_REF) 
+    key_ref, key_grid = jax.random.split(key)
 
-    intensity_msts_ref = simulate_measurements(keys, true_id, SIGMA)
+    # Fit the reference flux N_MST_REF times
+    keys_ref = jax.random.split(key_ref, N_MST_REF)
+    intensity_msts_ref = simulate_measurements(keys_ref, true_id, SIGMA)
     id_msts_ref = jax.tree.map(jax.vmap(closure), intensity_msts_ref)
-
-    id_sd_trad = jax.tree.map(lambda x: np.std(x, axis=0), id_msts_ref)
-    id_sd_clr = jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_ref)
-    id_sd_ilr = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_ref)
-
-
+    id_sds_ref = {
+        "trad": jax.tree.map(lambda x: np.std(x, axis=0), id_msts_ref),
+        "clr": jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_ref),
+        "ilr": jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_ref),
+    }
     for j in tqdm(range(N_MST_REF)):
-        mst_j = jax.tree.map(lambda x: x[j], id_msts_ref)
-        for m, loss, sd_tree in (
-            ("trad", loss_trad, id_sd_trad),
-            ("clr", loss_clr, id_sd_clr),
-            ("ilr", loss_ilr, id_sd_ilr),
-        ):
-            result = optimistix.minimise(
-                loss,
-                y0=jnp.log(INITIAL_GUESS),
-                args=(mst_j, jax.tree.map(lambda s: 1/s, sd_tree)),
-                solver=solver,
-                max_steps=10000,
-                throw=False,
-                has_aux=True,
-            )
-            flux_est = flux_from_free(jnp.exp(result.value))
+        mst = jax.tree.map(lambda x: x[j], id_msts_ref)
+        for mod in ("trad", "clr", "ilr"):
+            free_flux_est, flux_est_jax, id_est, ci, _, fval, flux_sd = fit(mst, model_to_loss[mod], id_sds_ref[mod])
+            flux_est_ref[mod] = flux_est_ref[mod].at[j].set(free_flux_est)
+            flux_est_full[mod] = flux_est_full[mod].at[j].set(flux_est_jax)
+            id_est_ref[mod][j] = id_est
+            flux_ci_ref[mod] = flux_ci_ref[mod].at[j].set(ci)
+            flux_sd_ref[mod] = flux_sd_ref[mod].at[j].set(flux_sd)
+            fval_ref[mod] = fval_ref[mod].at[j].set(fval)
 
-            id_est = result.aux
-            free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
-            flux_est_ref[m] = flux_est_ref[m].at[j].set(free_flux_est)
-            id_est_vec = jnp.concatenate(list(id_est.values()))
-            id_est_ref[m][j]=id_est
-            inv_hessian = result.state.f_info.hessian_inv.pytree
-            sigma_v = get_sigma_v(N, inv_hessian)
-            flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
-            flux_est_full[m] = flux_est_full[m].at[j].set(flux_est_jax)
-            flux_ci_i = calculate_ci(sigma_v, jnp.log(flux_est_jax))
-            flux_ci_ref[m] = flux_ci_ref[m].at[j].set(flux_ci_i)
-            flux_sd_ref_i = jnp.sqrt(jnp.diag(sigma_v))
-            flux_sd_ref[m] = flux_sd_ref[m].at[j].set(flux_sd_ref_i)
-            fval_ref_i = result.state.f_info.f
-            fval_ref[m] = fval_ref[m].at[j].set(fval_ref_i)
-
-    for i, free_flux in enumerate(tqdm(free_fluxes)):
-        key, _ = jax.random.split(key)
-        keys = jax.random.split(key, N_MST_PER_GRID_CELL)
-        free_flux_dict = {k: float(v) for k, v in zip(FREE_KEYS, free_flux)}
-        true_ids.append(SIMULATE_COMPOSITION(free_flux))
-        # entropies.append(jax.tree.map(lambda x: entropy(pk=x), true_ids[i]))
-        intensity_msts_i = simulate_measurements(keys, true_ids[i], SIGMA)
-        intensity_msts.append(intensity_msts_i)
+    # Fit each free flux combination in the grid M_MST_PER_GRID_CELL times
+    keys_grid = jax.random.split(key_grid, n_grid)
+    for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
+        keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
+        true_id_i = SIMULATE_COMPOSITION(free_flux)
+        intensity_msts_i = simulate_measurements(keys_i, true_id_i, SIGMA)
+        intensity_msts_grid.append(intensity_msts_i)
+        true_ids.append(true_id_i)
         id_msts_i = jax.tree.map(jax.vmap(closure), intensity_msts_i)
-        id_sd_trad = jax.tree.map(lambda x: np.std(x, axis=0), id_msts_i)
-        id_sd_clr = jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_i)
-        id_sd_ilr = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_i)
-        for j in range(N_MST_PER_GRID_CELL):
-            mst_j = jax.tree.map(lambda x: x[j], id_msts_i)
-            for m, loss, sd_tree in (
-                ("trad", loss_trad, id_sd_trad),
-                ("clr", loss_clr, id_sd_clr),
-                ("ilr", loss_ilr, id_sd_ilr),
-            ):
-                result = optimistix.minimise(
-                    loss,
-                    y0=jnp.log(INITIAL_GUESS),
-                    args=(mst_j, jax.tree.map(lambda s: 1/s, sd_tree)),
-                    solver=solver,
-                    max_steps=10000,
-                    throw=False,
-                    has_aux=True,
-                )
-                flux_est = flux_from_free(jnp.exp(result.value))
-                id_est = result.aux
-                free_flux_est = jax.tree.map(lambda x: flux_est[x].item(), FREE_KEYS)
-                flux_estimates[m] = flux_estimates[m].at[i, j].set(free_flux_est)
-                id_est_vec = jnp.concatenate(list(id_est.values()))
-                id_estimates[m][i][j]=id_est
-                inv_hessian = result.state.f_info.hessian_inv.pytree
-                sigma_v = get_sigma_v(N, inv_hessian)
-                flux_est_jax = jnp.array([flux_est[k] for k in flux_est.keys()])
-                flux_ci_i = calculate_ci(sigma_v, jnp.log(flux_est_jax))
-                flux_ci[m] = flux_ci[m].at[i,j].set(flux_ci_i)
-                # hessian_matrices[m] = hessian_matrices[m].at[i,j].set(result.state.f_info.hessian_inv.pytree)    
-    
-    
-    flux_estimate_path = OUTPUT_FOLDER / "estimated_fluxes.pkl"
-    print(f"Writing {flux_estimate_path}...")
-    with open(flux_estimate_path, "wb") as f:
-        pickle.dump(flux_estimates, f)
+        id_sds_i = {
+            "trad": jax.tree.map(lambda x: np.std(x, axis=0), id_msts_i),
+            "clr": jax.tree.map(lambda x: np.std(clr_func(x), axis=0), id_msts_i),
+            "ilr": jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), id_msts_i),
+        }
+        for j in range(M_MST_PER_GRID_CELL):
+            mst = jax.tree.map(lambda x: x[j], id_msts_i)
+            for mod in ("trad", "clr", "ilr"):
+                free_flux_est, _, id_est, ci, _, _, _ = fit(mst, model_to_loss[mod], id_sds_i[mod])
+                flux_estimates[mod] = flux_estimates[mod].at[i, j].set(free_flux_est)
+                id_estimates[mod][i][j] = id_est
+                flux_ci[mod] = flux_ci[mod].at[i, j].set(ci)
 
-    flux_ci_path = OUTPUT_FOLDER / "estimated_fluxes_ci.pkl"
-    print(f"Writing {flux_ci_path}...")
-    with open(flux_ci_path, "wb") as f:
-        pickle.dump(flux_ci, f)
-
-    id_estimate_path = OUTPUT_FOLDER / "estimated_ids.pkl"
-    print(f"Writing {id_estimate_path}...")
-    with open(id_estimate_path, "wb") as f:
-        pickle.dump(id_estimates, f)
-
-    intensity_msts_path = OUTPUT_FOLDER / "intensity_measurements.npy"
-    print(f"Writing {intensity_msts_path}...")
-    with open(intensity_msts_path, "wb") as f:
-        pickle.dump(intensity_msts, f)
-
-    free_flux_path = OUTPUT_FOLDER / "free_fluxes.npy"
-    print(f"Writing {free_flux_path}...")
-    jnp.save(free_flux_path, free_fluxes)
-
-    true_ids_path = OUTPUT_FOLDER / "true_isotopologue_distributions.npy"
-    print(f"Writing {true_ids_path}...")
-    with open(true_ids_path, "wb") as f:
-        pickle.dump(true_ids, f)
-
-    entropies_path = OUTPUT_FOLDER / "entropies.npy"
-    print(f"Writing {entropies_path}...")
-    with open(entropies_path, "wb") as f:
-        pickle.dump(entropies, f)
-      
     for obj, filename in (
+        (flux_estimates, "estimated_fluxes.pkl"),
+        (flux_ci, "estimated_fluxes_ci.pkl"),
+        (id_estimates, "estimated_ids.pkl"),
         (flux_est_ref, "estimated_fluxes_reference.pkl"),
         (flux_est_full, "estimated_fluxes_full.pkl"),
         (flux_ci_ref, "estimated_fluxes_ci_reference.pkl"),
         (id_est_ref, "estimated_ids_reference.pkl"),
         (fval_ref, "fvalues_reference.pkl"),
         (flux_sd_ref, "estimated_fluxes_sd_reference.pkl"),
-        (id_msts_ref, "id_simulated_reference.pkl")
+        (id_msts_ref, "id_simulated_reference.pkl"),
+        (intensity_msts_grid, "intensity_measurements.npy"),
+        (true_ids, "true_isotopologue_distributions.npy"),
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")
@@ -290,10 +222,12 @@ def main():
             pickle.dump(obj, f)
 
     for arr, filename in (
+        (flux_grid, "free_fluxes.npy"),
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")
         jnp.save(path, arr)
+
 
 if __name__ == "__main__":
     main()
