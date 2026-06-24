@@ -10,6 +10,8 @@ uv run scripts/permutation_invariance_plot.py
 uv run scripts/toy_network.py
 uv run scripts/tca_cycle.py
 uv run scripts/profile_likelihood.py
+uv run scripts/export_flux_residuals_reference.py
+uv run scripts/export_mse_diff.py
 
 echo "Step 2: Executing notebooks..."
 uv run jupyter execute notebooks/main_plots.ipynb
