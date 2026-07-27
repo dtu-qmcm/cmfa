@@ -6,6 +6,7 @@ import pypesto
 from pypesto.result import OptimizerResult
 import pypesto.profile as profile
 from cmfa.functions import ordered_ilr_func, profile_likelihood
+import random
 
 import sys
 sys.path.insert(0, "../scripts")
@@ -38,6 +39,13 @@ OUTPUT_FOLDER_TCA = PROJECT_ROOT / "data" / "results" / "tca_cycle"
 RESULTS_DIR_TOY = PROJECT_ROOT / "data" / "results" / "toy_example"
 RESULTS_DIR_TCA =  PROJECT_ROOT / "data" / "results" / "tca_cycle"
 
+key = jax.random.key(seed=1234)
+key_toy, key_tca = jax.random.split(key)
+random_idx_toy = jax.random.randint(key_toy, 1, 0, 10000)
+random_idx_tca = jax.random.randint(key_tca, 1, 0, 10000)
+print(f"Random index for toy model: {random_idx_toy}")
+print(f"Random index for tca cycle: {random_idx_tca}")
+
 # Toy network
 true_mid_toy = np.load(RESULTS_DIR_TOY / "true_composition.npy")
 true_flux_toy = np.load(RESULTS_DIR_TOY / "true_flux.npy")
@@ -45,6 +53,8 @@ simulated_mid_toy = jnp.load(RESULTS_DIR_TOY / "id_simulated_reference.npy")
 
 with open(RESULTS_DIR_TOY / "estimated_fluxes_reference.pkl", "rb") as f:
     estimated_fluxes_toy = pickle.load(f)
+
+random_sim_toy = simulated_mid_toy[random_idx_toy]
 
 sd_trad_toy = np.std(simulated_mid_toy, axis=0)
 sd_ilr_toy = np.std(ordered_ilr_func(simulated_mid_toy), axis=0)
@@ -59,7 +69,7 @@ solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
 opt_result_trad_toy = optimistix.minimise(
     toy_network.loss_trad,
     y0=jnp.log(init_guess_toy),
-    args=(true_mid_toy, weights_trad_toy),
+    args=(random_sim_toy, weights_trad_toy),
     solver=solver,
     max_steps=10000,
     throw=False,
@@ -69,7 +79,7 @@ opt_result_trad_toy = optimistix.minimise(
 opt_result_ilr_toy = optimistix.minimise(
     toy_network.loss_ilr,
     y0=jnp.log(init_guess_toy),
-    args=(true_mid_toy, weights_ilr_toy),
+    args=(random_sim_toy, weights_ilr_toy),
     solver=solver,
     max_steps=10000,
     throw=False,
@@ -80,8 +90,8 @@ lb_toy=[-7] * 2,
 ub_toy=[7] * 2,  
 x_names_toy=['v3', 'v5']
 
-result_trad_toy, ci_trad_profile_toy = profile_likelihood(toy_network.loss_trad, true_mid_toy, sd_trad_toy, np.exp(opt_result_trad_toy.value), opt_result_trad_toy.state.f_info.f, x_names_toy, lb_toy, ub_toy)
-result_ilr_toy, ci_ilr_profile_toy = profile_likelihood(toy_network.loss_ilr, true_mid_toy, sd_ilr_toy, np.exp(opt_result_ilr_toy.value), opt_result_ilr_toy.state.f_info.f, x_names_toy, lb_toy, ub_toy)
+result_trad_toy, ci_trad_profile_toy = profile_likelihood(toy_network.loss_trad, random_sim_toy, sd_trad_toy, np.exp(opt_result_trad_toy.value), opt_result_trad_toy.state.f_info.f, x_names_toy, lb_toy, ub_toy)
+result_ilr_toy, ci_ilr_profile_toy = profile_likelihood(toy_network.loss_ilr, random_sim_toy, sd_ilr_toy, np.exp(opt_result_ilr_toy.value), opt_result_ilr_toy.state.f_info.f, x_names_toy, lb_toy, ub_toy)
 
 trad_v3 = jnp.array([result_trad_toy.profile_result.get_profiler_result(0)["x_path"][0], result_trad_toy.profile_result.get_profiler_result(0)["ratio_path"]])
 trad_v5 = jnp.array([result_trad_toy.profile_result.get_profiler_result(1)["x_path"][1], result_trad_toy.profile_result.get_profiler_result(1)["ratio_path"]])
@@ -99,6 +109,8 @@ simulated_mid_tca = jnp.load(RESULTS_DIR_TCA / "id_simulated_reference.pkl", all
 with open(RESULTS_DIR_TCA / "estimated_fluxes_reference.pkl", "rb") as f:
     estimated_fluxes_tca = pickle.load(f)
 
+random_sim_tca = jax.tree.map(lambda x: x[random_idx_tca], simulated_mid_tca)
+
 sd_trad_tca = jax.tree.map(lambda x: np.std(x, axis=0), simulated_mid_tca)
 sd_ilr_tca = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), simulated_mid_tca)
 
@@ -111,7 +123,7 @@ solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
 opt_result_trad_tca = optimistix.minimise(
     tca_cycle.loss_trad,
     y0=jnp.log(init_guess_tca),
-    args=(true_mid_tca, weights_trad_tca),
+    args=(random_sim_tca, weights_trad_tca),
     solver=solver,
     max_steps=10000,
     throw=False,
@@ -121,7 +133,7 @@ opt_result_trad_tca = optimistix.minimise(
 opt_result_ilr_tca = optimistix.minimise(
     tca_cycle.loss_ilr,
     y0=jnp.log(init_guess_tca),
-    args=(true_mid_tca, weights_ilr_tca),
+    args=(random_sim_tca, weights_ilr_tca),
     solver=solver,
     max_steps=10000,
     throw=False,
@@ -132,8 +144,8 @@ lb_tca = [-7] * 3,
 ub_tca = [7] * 3,  
 x_names_tca = ['v8', 'v2', "v9"]
 
-result_trad_tca, ci_tca_profile_trad = profile_likelihood(tca_cycle.loss_trad, true_mid_tca, sd_trad_tca, np.exp(opt_result_trad_tca.value), opt_result_trad_tca.state.f_info.f, x_names_tca, lb_tca, ub_tca, use_jax_weights=True)
-result_ilr_tca, ci_tca_profile_ilr = profile_likelihood(tca_cycle.loss_ilr, true_mid_tca, sd_ilr_tca, np.exp(opt_result_ilr_tca.value), opt_result_ilr_tca.state.f_info.f, x_names_tca, lb_tca, ub_tca, use_jax_weights=True)
+result_trad_tca, ci_tca_profile_trad = profile_likelihood(tca_cycle.loss_trad, random_sim_tca, sd_trad_tca, np.exp(opt_result_trad_tca.value), opt_result_trad_tca.state.f_info.f, x_names_tca, lb_tca, ub_tca, use_jax_weights=True)
+result_ilr_tca, ci_tca_profile_ilr = profile_likelihood(tca_cycle.loss_ilr, random_sim_tca, sd_ilr_tca, np.exp(opt_result_ilr_tca.value), opt_result_ilr_tca.state.f_info.f, x_names_tca, lb_tca, ub_tca, use_jax_weights=True)
 
 trad_v8 = jnp.array([result_trad_tca.profile_result.get_profiler_result(0)["x_path"][0], result_trad_tca.profile_result.get_profiler_result(0)["ratio_path"]])
 trad_v2 = jnp.array([result_trad_tca.profile_result.get_profiler_result(1)["x_path"][1], result_trad_tca.profile_result.get_profiler_result(1)["ratio_path"]])
