@@ -40,7 +40,8 @@ RESULTS_DIR_TOY = PROJECT_ROOT / "data" / "results" / "toy_example"
 RESULTS_DIR_TCA =  PROJECT_ROOT / "data" / "results" / "tca_cycle"
 
 key = jax.random.key(seed=1234)
-key_toy, key_tca = jax.random.split(key)
+key_toy, key = jax.random.split(key)
+key_tca, key = jax.random.split(key)
 random_idx_toy = jax.random.randint(key_toy, 1, 0, 10000)
 random_idx_tca = jax.random.randint(key_tca, 1, 0, 10000)
 print(f"Random index for toy model: {random_idx_toy}")
@@ -139,7 +140,7 @@ opt_result_ilr_tca = optimistix.minimise(
     throw=False,
     has_aux=True,
 )
-
+jax.debug.breakpoint()
 lb_tca = [-7] * 3, 
 ub_tca = [7] * 3,  
 x_names_tca = ['v8', 'v2', "v9"]
