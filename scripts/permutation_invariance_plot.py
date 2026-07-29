@@ -26,9 +26,9 @@ df = df.with_columns([
 
 # 3. Add explicit label strings directly to the dataframe
 labels = [
-    "5 m+0 : 1 m+1", "4 m+0 : 1 m+1", "3 m+0 : 1 m+1", 
-    "2 m+0 : 1 m+1", "1 m+0 : 1 m+1", "1 m+0 : 2 m+1", 
-    "1 m+0 : 3 m+1", "1 m+0 : 4 m+1", "1 m+0 : 5 m+1"
+    "5 : 1", "4 : 1", "3 : 1", 
+    "2 : 1", "1 : 1", "1 : 2", 
+    "1 : 3", "1 : 4", "1 : 5"
 ]
 df = df.with_columns(pl.Series("labels", labels))
 
@@ -69,8 +69,9 @@ sns.lineplot(
     ax=ax
 )
 
-ax.tick_params(axis="x", rotation=45)
-ax.set_xlabel("") 
+ax.legend(title=None)
+ax.tick_params(axis="x", rotation=0)
+ax.set_xlabel("Ratio m+0 : m+1") 
 plt.tight_layout() 
-plt.savefig('../figures/2_permutation_invariance.png', dpi=300, bbox_inches='tight', pad_inches=0.12)
+plt.savefig('figures/permutation_invariance.png', dpi=300, bbox_inches='tight', pad_inches=0.12)
 plt.show()
