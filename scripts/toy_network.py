@@ -1,8 +1,8 @@
 import pdb
 import pickle
+from functools import partial
 from itertools import product
 from pathlib import Path
-from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -10,14 +10,12 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.toy_network_emu import toy_network
-
 from cmfa.functions import (
-    ordered_ilr_func,
-    closure,
     calculate_ci,
+    closure,
+    ordered_ilr_func,
 )
-
+from cmfa.toy_network_emu import toy_network
 
 jax.config.update("jax_enable_x64", True)
 

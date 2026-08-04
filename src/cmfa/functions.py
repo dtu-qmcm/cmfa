@@ -1,14 +1,13 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pypesto
+import pypesto.profile as profile
 from jax import config
-import sympy
+from pypesto.result import OptimizerResult
 from scipy import stats
 from scipy.spatial.distance import euclidean
 from skbio.stats.composition import sbp_basis
-import pypesto
-from pypesto.result import OptimizerResult
-import pypesto.profile as profile
 
 config.update("jax_enable_x64", True)
 

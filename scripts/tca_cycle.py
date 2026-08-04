@@ -1,8 +1,8 @@
 import pdb
 import pickle
+from functools import partial
 from itertools import product
 from pathlib import Path
-from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -10,7 +10,7 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.functions import ordered_ilr_func, closure, calculate_ci
+from cmfa.functions import calculate_ci, closure, ordered_ilr_func
 from cmfa.tca_cycle_emu import TCA_cycle, flux_vector, get_N
 
 jax.config.update("jax_enable_x64", True)

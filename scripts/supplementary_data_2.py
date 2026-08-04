@@ -1,12 +1,13 @@
-import numpy as np
-import jax.numpy as jnp
 import pickle
-import pandas as pd
 from pathlib import Path
+
+import jax.numpy as jnp
+import numpy as np
+import pandas as pd
 
 RESULTS_DIR_TOY = Path(__file__).parent.parent / "data" / "results" / "toy_example"
 RESULTS_DIR_TCA = Path(__file__).parent.parent / "data" / "results" / "tca_cycle"
-OUTPUT_PATH = Path(__file__).parent.parent / "data" / "results" / "mse_diff_results.xlsx"
+OUTPUT_PATH = Path(__file__).parent.parent / "data" / "results" / "supplementary_data_2.xlsx"
 
 # ── Toy Network ───────────────────────────────────────────────────────────────
 free_fluxes_toy = np.load(RESULTS_DIR_TOY / "free_fluxes_grid.npy")

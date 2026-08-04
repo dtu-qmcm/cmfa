@@ -1,11 +1,12 @@
-import numpy as np
 import pickle
-import pandas as pd
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 RESULTS_DIR_TOY = Path(__file__).parent.parent / "data" / "results" / "toy_example"
 RESULTS_DIR_TCA = Path(__file__).parent.parent / "data" / "results" / "tca_cycle"
-OUTPUT_PATH = Path(__file__).parent.parent / "data" / "results" / "flux_residuals_reference.xlsx"
+OUTPUT_PATH = Path(__file__).parent.parent / "data" / "results" / "supplementary_data_1.xlsx"
 
 # ── Toy Network ───────────────────────────────────────────────────────────────
 true_flux_toy = np.load(RESULTS_DIR_TOY / "true_flux.npy")

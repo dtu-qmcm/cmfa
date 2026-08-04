@@ -35,3 +35,8 @@ packages = ["src/cmfa"]
 
 [tool.ruff]
 line-length = 80
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.1",
+]

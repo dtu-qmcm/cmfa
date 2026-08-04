@@ -1,31 +1,32 @@
 import pdb
-import numpy as np
+import random
+import sys
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pypesto
-from pypesto.result import OptimizerResult
 import pypesto.profile as profile
+from pypesto.result import OptimizerResult
+
 from cmfa.functions import ordered_ilr_func, profile_likelihood
-import random
 
-import sys
 sys.path.insert(0, "../scripts")
-import toy_network
-import tca_cycle
-
 import pickle
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-from matplotlib.lines import Line2D
-
+import matplotlib.pyplot as plt
+import tca_cycle
+import toy_network
 from jax import config
+from matplotlib.lines import Line2D
 
 config.update("jax_enable_x64", True)
 
-import scipy.stats as stats
 import optimistix
+import scipy.stats as stats
+
 # M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
 # N = jnp.vstack([-M, jnp.eye(3)])
 # IX_INPUT_FLUX = np.array([0])

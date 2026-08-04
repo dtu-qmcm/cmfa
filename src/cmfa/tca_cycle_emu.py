@@ -1,8 +1,5 @@
-import jax
 import jax.numpy as jnp
-from scipy import stats
 
-from cmfa.functions import clr_func
 
 def get_N():
     M_irr = jnp.array(
