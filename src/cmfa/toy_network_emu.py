@@ -7,9 +7,9 @@ import sympy
 config.update("jax_enable_x64", True)
 
 
-def simple_net(parameters: jax.Array, v1: float) -> jax.Array:
+def toy_network(parameters: jax.Array, v1: float) -> jax.Array:
     """
-    Takes vector of fluxes and return the MID for F123 in a simple metabolic network
+    Takes vector of fluxes and return the MID for F123 in a toy metabolic network
 
     :param parameters: Fluxes to be estimated
     :param v1: Input flux

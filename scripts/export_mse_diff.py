@@ -9,8 +9,8 @@ RESULTS_DIR_TCA = Path(__file__).parent.parent / "data" / "results" / "tca_cycle
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "results" / "mse_diff_results.xlsx"
 
 # ── Toy Network ───────────────────────────────────────────────────────────────
-free_fluxes_toy = np.load(RESULTS_DIR_TOY / "free_fluxes.npy")
-with open(RESULTS_DIR_TOY / "estimated_fluxes.pkl", "rb") as f:
+free_fluxes_toy = np.load(RESULTS_DIR_TOY / "free_fluxes_grid.npy")
+with open(RESULTS_DIR_TOY / "estimated_fluxes_grid.pkl", "rb") as f:
     estimated_fluxes_toy = pickle.load(f)
 
 resid_trad_toy = free_fluxes_toy[:, None, :] - estimated_fluxes_toy["trad"][:, :, [4, 5]]

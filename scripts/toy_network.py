@@ -10,10 +10,9 @@ import numpy as np
 import optimistix
 from tqdm import tqdm
 
-from cmfa.emu_example import simple_net
+from cmfa.toy_network_emu import toy_network
 
 from cmfa.functions import (
-    clr_func,
     ordered_ilr_func,
     closure,
     calculate_ci,
@@ -43,7 +42,7 @@ M_MST_PER_GRID_CELL = 50
 N_MST_REF = 10000
 
 INITIAL_GUESS = jnp.array([100, 50])
-SIMULATE_COMPOSITION = partial(simple_net, v1=KNOWN_FLUXES[0].item())
+SIMULATE_COMPOSITION = partial(toy_network, v1=KNOWN_FLUXES[0].item())
 SEED = 1234
 
 
@@ -87,11 +86,6 @@ def loss_trad(log_free_flux, args):
     return wssr(composition, args), composition
 
 
-def loss_clr(log_free_flux, args):
-    composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
-    target, weights = args
-    return wssr(clr_func(composition), (clr_func(target), weights)), composition
-
 
 def loss_ilr(log_free_flux, args):
     composition = SIMULATE_COMPOSITION(jnp.exp(log_free_flux))
@@ -124,7 +118,7 @@ def main():
     )
 
     def empties(shape):
-        return {model: jnp.empty(shape) for model in ("trad", "clr", "ilr")}
+        return {model: jnp.empty(shape) for model in ("trad", "ilr")}
 
     def fit(mst, loss, sd):
         result = optimistix.minimise(
@@ -137,7 +131,7 @@ def main():
             has_aux=True,
         )
         log_free_flux_est = result.value
-        id_est = result.aux
+        mid_est = result.aux
         fval = float(result.state.f_info.f)
         free_flux_est = jnp.exp(log_free_flux_est)
         flux_est = expand_free_fluxes(free_flux_est)[corrected_index]
@@ -145,21 +139,21 @@ def main():
         sigma_v = get_sigma_v(N, inv_hessian)
         flux_sd_est = jnp.sqrt(jnp.diag(sigma_v))
         ci = calculate_ci(sigma_v, jnp.log(flux_est))
-        return flux_est, id_est, ci, inv_hessian, fval, flux_sd_est
+        return flux_est, mid_est, ci, inv_hessian, fval, flux_sd_est
 
-    model_to_loss = {"trad": loss_trad, "clr": loss_clr, "ilr": loss_ilr}
+    model_to_loss = {"trad": loss_trad, "ilr": loss_ilr}
 
     solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
     true_flux = expand_free_fluxes(TRUE_FREE_FLUXES)
-    true_id = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
+    true_mid = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
     n_flux = len(true_flux)
-    n_comp = len(true_id)
+    n_comp = len(true_mid)
     print(f"True flux: {true_flux}")
-    print(f"True composition: {true_id}")
+    print(f"True composition: {true_mid}")
     print(f"Writing {TRUE_FLUX_FILE}...")
     np.save(TRUE_FLUX_FILE, true_flux)
     print(f"Writing {TRUE_COMPOSITION_FILE}...")
-    np.save(TRUE_COMPOSITION_FILE, true_id)
+    np.save(TRUE_COMPOSITION_FILE, true_mid)
     flux_grid = get_flux_grid(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
     n_grid = len(flux_grid)
     n_free = len(IX_FREE_FLUXES)
@@ -168,14 +162,14 @@ def main():
     # initialise containers
     flux_est_ref = empties((N_MST_REF, n_flux))
     flux_ci_ref = empties((N_MST_REF, n_flux, 2))
-    id_est_ref = empties((N_MST_REF, n_comp))
+    mid_est_ref = empties((N_MST_REF, n_comp))
     flux_sd_est = empties((N_MST_REF, n_flux))
     flux_est_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux))
     flux_ci_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_flux, 2))
-    id_est_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_comp))
+    mid_est_grid = empties((n_grid, M_MST_PER_GRID_CELL, n_comp))
     intensity_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
-    id_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
-    true_ids_grid = jnp.empty((n_grid, n_comp))
+    mid_msts_grid = jnp.empty((n_grid, M_MST_PER_GRID_CELL, n_comp))
+    true_mids_grid = jnp.empty((n_grid, n_comp))
 
     # get keys
     key_ref, key_grid = jax.random.split(key)
@@ -183,20 +177,19 @@ def main():
     # Fit the reference flux N_MEASUREMENT_REF times
     corrected_index = jnp.array([1, 3, 5, 0, 2, 4])
     keys_ref = jax.random.split(key_ref, N_MST_REF)
-    intensity_msts_ref = simulate_measurements(keys_ref, true_id, SIGMA)
-    id_msts_ref = closure(intensity_msts_ref)
-    id_sds_ref = {
-        "trad": np.std(id_msts_ref, axis=0),
-        "clr": np.std(clr_func(id_msts_ref), axis=0),
-        "ilr": np.std(ordered_ilr_func(id_msts_ref), axis=0),
+    intensity_msts_ref = simulate_measurements(keys_ref, true_mid, SIGMA)
+    mid_msts_ref = closure(intensity_msts_ref)
+    mid_sds_ref = {
+        "trad": np.std(mid_msts_ref, axis=0),
+        "ilr": np.std(ordered_ilr_func(mid_msts_ref), axis=0),
     }
-    for j, mst in enumerate(tqdm(id_msts_ref)):
-        for mod in ("trad", "clr", "ilr"):
+    for j, mst in enumerate(tqdm(mid_msts_ref)):
+        for mod in ("trad", "ilr"):
             loss = model_to_loss[mod]
-            composition_sd = id_sds_ref[mod]
-            flux_est, id_est, ci, _, _, flux_sd = fit(mst, loss, composition_sd)
+            composition_sd = mid_sds_ref[mod]
+            flux_est, mid_est, ci, _, _, flux_sd = fit(mst, loss, composition_sd)
             flux_est_ref[mod] = flux_est_ref[mod].at[j].set(flux_est)
-            id_est_ref[mod] = id_est_ref[mod].at[j].set(id_est)
+            mid_est_ref[mod] = mid_est_ref[mod].at[j].set(mid_est)
             flux_ci_ref[mod] = flux_ci_ref[mod].at[j].set(ci)
             flux_sd_est[mod] = flux_sd_est[mod].at[j].set(flux_sd)
 
@@ -204,33 +197,32 @@ def main():
     keys_grid = jax.random.split(key_grid, n_grid)
     for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
         keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
-        true_id_i = SIMULATE_COMPOSITION(free_flux)
-        intensity_msts_i = simulate_measurements(keys_i, true_id_i, SIGMA)
-        id_msts_i = closure(intensity_msts_i)
-        id_msts_grid = id_msts_grid.at[i].set(id_msts_i)
+        true_mid_i = SIMULATE_COMPOSITION(free_flux)
+        intensity_msts_i = simulate_measurements(keys_i, true_mid_i, SIGMA)
+        mid_msts_i = closure(intensity_msts_i)
+        mid_msts_grid = mid_msts_grid.at[i].set(mid_msts_i)
         intensity_msts_grid = intensity_msts_grid.at[i].set(intensity_msts_i)
-        true_ids_grid = true_ids_grid.at[i].set(true_id_i)
-        id_sds_i = {
-            "trad": np.std(id_msts_i, axis=0),
-            "clr": np.std(clr_func(id_msts_i), axis=0),
-            "ilr": np.std(ordered_ilr_func(id_msts_i), axis=0),
+        true_mids_grid = true_mids_grid.at[i].set(true_mid_i)
+        mid_sds_i = {
+            "trad": np.std(mid_msts_i, axis=0),
+            "ilr": np.std(ordered_ilr_func(mid_msts_i), axis=0),
         }
-        for j, mst in enumerate(id_msts_i):
-            for mod in ("trad", "clr", "ilr"):
+        for j, mst in enumerate(mid_msts_i):
+            for mod in ("trad", "ilr"):
                 loss = model_to_loss[mod]
-                composition_sd = id_sds_i[mod]
-                flux_est, id_est, ci, _,_,_ = fit(mst, loss, composition_sd)
+                composition_sd = mid_sds_i[mod]
+                flux_est, mid_est, ci, _,_,_ = fit(mst, loss, composition_sd)
                 flux_est_grid[mod] = flux_est_grid[mod].at[i, j].set(flux_est)
-                id_est_grid[mod] = id_est_grid[mod].at[i, j].set(id_est)
+                mid_est_grid[mod] = mid_est_grid[mod].at[i, j].set(mid_est)
                 flux_ci_grid[mod] = flux_ci_grid[mod].at[i, j].set(ci)
 
     for obj, filename in (
-        (flux_est_grid, "estimated_fluxes.pkl"),
-        (flux_ci_grid, "estimated_fluxes_ci.pkl"),
-        (id_est_grid, "estimated_ids.pkl"),
+        (flux_est_grid, "estimated_fluxes_grid.pkl"),
+        (flux_ci_grid, "estimated_fluxes_ci_grid.pkl"),
+        (mid_est_grid, "estimated_mids_grid.pkl"),
         (flux_est_ref, "estimated_fluxes_reference.pkl"),
         (flux_ci_ref, "estimated_fluxes_ci_reference.pkl"),
-        (id_est_ref, "estimated_ids_reference.pkl"),
+        (mid_est_ref, "estimated_mids_reference.pkl"),
         (flux_sd_est, "estimated_fluxes_sd_reference.pkl"),
     ):
         path = OUTPUT_FOLDER / filename
@@ -238,11 +230,11 @@ def main():
         with open(path, "wb") as f:
             pickle.dump(obj, f)
     for arr, filename in (
-        (intensity_msts_grid, "intensity_measurements.npy"),
-        (flux_grid, "free_fluxes.npy"),
-        (true_ids_grid, "true_isotopologue_distributions.npy"),
-        (id_msts_ref, "id_simulated_reference.npy"),
-        (id_msts_grid, "id_simulated.npy"),
+        (intensity_msts_grid, "intensity_measurements_grid.npy"),
+        (flux_grid, "free_fluxes_grid.npy"),
+        (true_mids_grid, "true_isotopologue_distributions.npy"),
+        (mid_msts_grid, "mid_simulated_grid.npy"),
+        (mid_msts_ref, "mid_simulated_reference.npy"),
     ):
         path = OUTPUT_FOLDER / filename
         print(f"Writing {path}...")

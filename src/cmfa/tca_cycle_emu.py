@@ -72,7 +72,7 @@ def flux_vector(parameters, fixed: dict):
 
 
 
-def TCA_OpenFLux(parameters, fixed: dict) -> dict:
+def TCA_cycle(parameters, fixed: dict) -> dict:
     parameters_dict = {"v8": parameters[0], "v2": parameters[1], "v9": parameters[2]}
     v = flux_vector(parameters=parameters, fixed=fixed)
     names = [
@@ -408,50 +408,3 @@ def TCA_OpenFLux(parameters, fixed: dict) -> dict:
         "aspx_1234": aspx_1234,
         "suc_1234": suc_1234,
     }
-
-
-def objective_wssr(params: dict, args):
-    data_obs, D_list, fixed = args
-    outputs = TCA_OpenFLux(params, fixed)
-    residuals = jax.tree.map(lambda e, o: e - o, outputs, data_obs)
-    total = sum(
-        r.T @ jnp.linalg.inv(D) @ r
-        for r, D in zip(jax.tree.leaves(residuals), jax.tree.leaves(D_list))
-    )
-    return total
-
-
-def objective_clr_wssr(params: dict, args):
-    data_obs, D_list, fixed = args
-    outputs = TCA_OpenFLux(params, fixed)
-    outputs_clr = jax.tree.map(lambda x: clr_func(x), outputs)
-    residuals = jax.tree.map(lambda e, o: e - o, outputs_clr, data_obs)
-    total = sum(
-        r.T @ jnp.linalg.inv(D) @ r
-        for r, D in zip(jax.tree.leaves(residuals), jax.tree.leaves(D_list))
-    )
-    return total
-
-def calc_ci(opti_solution, confidence_level=0.95) -> dict:
-    hess_inv_dict = opti_solution.state.f_info.hessian_inv.pytree
-    standard_errors = {
-        k: jnp.sqrt(hess_inv_dict[k][k]) for k in hess_inv_dict.keys()
-    }
-
-    # Parameters from your optimization
-    params = opti_solution.value
-    alpha = 1 - confidence_level
-    # Critical value (Z-score for 95%)
-    z = stats.norm.ppf(1 - alpha / 2)
-    ci_results = {}
-    for k in params.keys():
-        se = standard_errors[k]
-        val = params[k]
-
-        ci_results[k] = {
-            "mean": val,
-            "std_error": se,
-            "lower": val - z * se,
-            "upper": val + z * se,
-        }
-    return ci_results
