@@ -11,7 +11,7 @@ uv run scripts/profile_likelihoods.py || exit 1
 
 echo "Step 2: Making plots..."
 uv run jupyter execute notebooks/main_plots.ipynb || exit 1
-uv run jupyter execute notebooks/ci_plots.ipynb || exit 1
+uv run jupyter execute notebooks/ci_plot.ipynb || exit 1
 uv run jupyter execute notebooks/supplementary_fig_b6.ipynb || exit 1
 uv run scripts/supplementary_fig_c7.py || exit 1
 
