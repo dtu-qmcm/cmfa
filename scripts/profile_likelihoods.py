@@ -1,13 +1,8 @@
-import pdb
-import random
 import sys
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pypesto
-import pypesto.profile as profile
-from pypesto.result import OptimizerResult
 
 from cmfa.functions import ordered_ilr_func, profile_likelihood
 
@@ -15,17 +10,13 @@ sys.path.insert(0, "../scripts")
 import pickle
 from pathlib import Path
 
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
 import tca_cycle
 import toy_network
 from jax import config
-from matplotlib.lines import Line2D
 
 config.update("jax_enable_x64", True)
 
 import optimistix
-import scipy.stats as stats
 
 # M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
 # N = jnp.vstack([-M, jnp.eye(3)])
@@ -51,7 +42,7 @@ print(f"Random index for tca cycle: {random_idx_tca}")
 # Toy network
 true_mid_toy = np.load(RESULTS_DIR_TOY / "true_composition.npy")
 true_flux_toy = np.load(RESULTS_DIR_TOY / "true_flux.npy")
-simulated_mid_toy = jnp.load(RESULTS_DIR_TOY / "id_simulated_reference.npy")
+simulated_mid_toy = jnp.load(RESULTS_DIR_TOY / "mid_simulated_reference.npy")
 
 with open(RESULTS_DIR_TOY / "estimated_fluxes_reference.pkl", "rb") as f:
     estimated_fluxes_toy = pickle.load(f)
@@ -106,7 +97,7 @@ profile_toy = {"trad": {"v3": trad_v3, "v5": trad_v5, "ci": ci_trad_profile_toy}
 # tca cycle
 true_mid_tca = np.load(RESULTS_DIR_TCA / "true_composition.npy", allow_pickle=True).item()
 true_flux_tca = np.load(RESULTS_DIR_TCA / "true_flux.npy", allow_pickle=True)
-simulated_mid_tca = jnp.load(RESULTS_DIR_TCA / "id_simulated_reference.pkl", allow_pickle=True)
+simulated_mid_tca = jnp.load(RESULTS_DIR_TCA / "mid_simulated_reference.pkl", allow_pickle=True)
 
 with open(RESULTS_DIR_TCA / "estimated_fluxes_reference.pkl", "rb") as f:
     estimated_fluxes_tca = pickle.load(f)
@@ -141,7 +132,6 @@ opt_result_ilr_tca = optimistix.minimise(
     throw=False,
     has_aux=True,
 )
-jax.debug.breakpoint()
 lb_tca = [-7] * 3, 
 ub_tca = [7] * 3,  
 x_names_tca = ['v8', 'v2', "v9"]
