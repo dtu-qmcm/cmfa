@@ -1,3 +1,10 @@
+"""
+Supplementary figure C7: a permutation invariance 
+illustration using a simple two-composition Polars 
+DataFrame, showing that linear vs. log-ratio scales
+handle asymmetric ratios differently (e.g. 5:1 vs. 1:5).
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl

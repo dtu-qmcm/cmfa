@@ -1,3 +1,9 @@
+"""
+Exports Supplementary Data 1 as an Excel file: flux estimates and 
+residuals for the reference simulation (single flux set) for both 
+networks, comparing traditional vs. compositional MFA.
+"""
+
 import pickle
 from pathlib import Path
 

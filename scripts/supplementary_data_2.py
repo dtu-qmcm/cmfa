@@ -1,3 +1,8 @@
+"""
+Exports Supplementary Data 2 as an Excel file: MSE and residuals 
+across the full flux grid (sensitivity analysis) for both networks.
+"""
+
 import pickle
 from pathlib import Path
 
