@@ -106,6 +106,7 @@ def get_flux_grid(limits, sizes):
 
 
 def main():
+    print(f"Running Toy Network\n")
     expand_free_fluxes = partial(
         get_flux_vector,
         known=KNOWN_FLUXES,
@@ -145,12 +146,13 @@ def main():
     true_mid = SIMULATE_COMPOSITION(TRUE_FREE_FLUXES)
     n_flux = len(true_flux)
     n_comp = len(true_mid)
-    print(f"True flux: {true_flux}")
-    print(f"True composition: {true_mid}")
+    print(f"True flux: {true_flux}\n")
+    print(f"True composition: {true_mid}\n")
     print(f"Writing {TRUE_FLUX_FILE}...")
     np.save(TRUE_FLUX_FILE, true_flux)
     print(f"Writing {TRUE_COMPOSITION_FILE}...")
     np.save(TRUE_COMPOSITION_FILE, true_mid)
+    
     flux_grid = get_flux_grid(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
     n_grid = len(flux_grid)
     n_free = len(IX_FREE_FLUXES)
@@ -180,6 +182,7 @@ def main():
         "trad": np.std(mid_msts_ref, axis=0),
         "ilr": np.std(ordered_ilr_func(mid_msts_ref), axis=0),
     }
+    print("Running Toy network ground truth flux recovery...")
     for j, mst in enumerate(tqdm(mid_msts_ref)):
         for mod in ("trad", "ilr"):
             loss = model_to_loss[mod]
@@ -192,6 +195,7 @@ def main():
 
     # fit each free flux combination in the grid N_MST_PER_FLUX times
     keys_grid = jax.random.split(key_grid, n_grid)
+    print("Running Toy network sensitivity analysis...")
     for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
         keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
         true_mid_i = SIMULATE_COMPOSITION(free_flux)

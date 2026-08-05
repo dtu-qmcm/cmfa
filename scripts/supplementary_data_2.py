@@ -38,8 +38,8 @@ df_toy = pd.DataFrame({
 })
 
 # ── TCA Cycle ─────────────────────────────────────────────────────────────────
-free_fluxes_tca = np.array(jnp.load(RESULTS_DIR_TCA / "free_fluxes.npy", allow_pickle=True))
-with open(RESULTS_DIR_TCA / "estimated_fluxes.pkl", "rb") as f:
+free_fluxes_tca = np.array(jnp.load(RESULTS_DIR_TCA / "free_fluxes_grid.npy", allow_pickle=True))
+with open(RESULTS_DIR_TCA / "estimated_fluxes_grid.pkl", "rb") as f:
     estimated_fluxes_tca = pickle.load(f)
 
 resid_trad_tca = free_fluxes_tca[:, None, :] - np.array(estimated_fluxes_tca["trad"])

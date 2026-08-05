@@ -18,10 +18,6 @@ config.update("jax_enable_x64", True)
 
 import optimistix
 
-# M = jnp.array([[-1, -1, 2], [0, 0, -1], [-1, 0, 1]])
-# N = jnp.vstack([-M, jnp.eye(3)])
-# IX_INPUT_FLUX = np.array([0])
-
 PROJECT_ROOT = Path(__file__).parent.parent
 
 OUTPUT_FOLDER_TOY = PROJECT_ROOT / "data" / "results" / "toy_example"
@@ -30,6 +26,8 @@ OUTPUT_FOLDER_TCA = PROJECT_ROOT / "data" / "results" / "tca_cycle"
 
 RESULTS_DIR_TOY = PROJECT_ROOT / "data" / "results" / "toy_example"
 RESULTS_DIR_TCA =  PROJECT_ROOT / "data" / "results" / "tca_cycle"
+
+print("Profile likelihood calculations")
 
 key = jax.random.key(seed=1234)
 key_toy, key = jax.random.split(key)
@@ -40,6 +38,7 @@ print(f"Random index for toy model: {random_idx_toy}")
 print(f"Random index for tca cycle: {random_idx_tca}")
 
 # Toy network
+print("Toy network profile likelihood")
 true_mid_toy = np.load(RESULTS_DIR_TOY / "true_composition.npy")
 true_flux_toy = np.load(RESULTS_DIR_TOY / "true_flux.npy")
 simulated_mid_toy = jnp.load(RESULTS_DIR_TOY / "mid_simulated_reference.npy")
@@ -95,6 +94,7 @@ ilr_v5 = jnp.array([result_ilr_toy.profile_result.get_profiler_result(1)["x_path
 profile_toy = {"trad": {"v3": trad_v3, "v5": trad_v5, "ci": ci_trad_profile_toy}, "ilr": {"v3": ilr_v3, "v5": ilr_v5, "ci": ci_ilr_profile_toy}}
 
 # tca cycle
+print("TCA cycle profile likelihood")
 true_mid_tca = np.load(RESULTS_DIR_TCA / "true_composition.npy", allow_pickle=True).item()
 true_flux_tca = np.load(RESULTS_DIR_TCA / "true_flux.npy", allow_pickle=True)
 simulated_mid_tca = jnp.load(RESULTS_DIR_TCA / "mid_simulated_reference.pkl", allow_pickle=True)

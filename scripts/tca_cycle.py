@@ -16,6 +16,10 @@ jax.config.update("jax_enable_x64", True)
 
 PROJECT_ROOT = Path(__file__).parent.parent
 OUTPUT_FOLDER = PROJECT_ROOT / "data" / "results" / "tca_cycle"
+
+TRUE_FLUX_FILE = OUTPUT_FOLDER / "true_flux.npy"
+TRUE_COMPOSITION_FILE = OUTPUT_FOLDER / "true_composition.npy"
+
 V_FREE = {"v8": 0.215, "v1": 1, "v19": 0.05, "v20": 0.03, "v16": 0.07, "v17": 0.23, "v18": 0.12, "v2": 0.201, "v9": 0.296}
 KNOWN_KEYS = ["v1", "v16", "v17", "v18", "v19", "v20"]
 KNOWN_FLUXES = {k: V_FREE[k] for k in KNOWN_KEYS}
@@ -84,6 +88,7 @@ def get_flux_grid(limits, sizes):
 
 
 def main():
+    print(f"Running TCA cycle\n")
     flux_from_free = partial(
         flux_vector,
         fixed=KNOWN_FLUXES,
@@ -123,10 +128,10 @@ def main():
     n_free_flux = len(TRUE_FREE_FLUXES)
     print(f"True flux: {true_flux}")
     print(f"True composition: {true_mid}")
-    print(f"Writing {OUTPUT_FOLDER / 'true_flux.npy'}...")
-    np.save(OUTPUT_FOLDER / "true_flux.npy", true_flux)
-    print(f"Writing {OUTPUT_FOLDER / 'true_composition.npy'}...")
-    np.save(OUTPUT_FOLDER / "true_composition.npy", true_mid)
+    print(f"Writing {TRUE_FLUX_FILE}...")
+    np.save(TRUE_FLUX_FILE, true_flux)
+    print(f"Writing {TRUE_COMPOSITION_FILE}...")
+    np.save(TRUE_COMPOSITION_FILE, true_mid)
 
     flux_grid = get_flux_grid(FREE_FLUX_RANGE, FREE_FLUX_GRID_SIZE)
     n_grid = len(flux_grid)
@@ -158,6 +163,7 @@ def main():
         "trad": jax.tree.map(lambda x: np.std(x, axis=0), mid_msts_ref),
         "ilr": jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), mid_msts_ref),
     }
+    print("Running TCA cycle ground truth flux recovery...")
     for j in tqdm(range(N_MST_REF)):
         mst = jax.tree.map(lambda x: x[j], mid_msts_ref)
         for mod in ("trad", "ilr"):
@@ -171,6 +177,7 @@ def main():
 
     # Fit each free flux combination in the grid M_MST_PER_GRID_CELL times
     keys_grid = jax.random.split(key_grid, n_grid)
+    print("Running TCA cycle sensitivity analysis...")
     for (i, free_flux), key_i in zip(enumerate(tqdm(flux_grid)), keys_grid):
         keys_i = jax.random.split(key_i, M_MST_PER_GRID_CELL)
         true_mid_i = SIMULATE_COMPOSITION(free_flux)
@@ -205,7 +212,6 @@ def main():
         (true_mids, "true_isotopologue_distributions.npy"),
     ):
         path = OUTPUT_FOLDER / filename
-        print(f"Writing {path}...")
         with open(path, "wb") as f:
             pickle.dump(obj, f)
 
@@ -213,7 +219,6 @@ def main():
         (flux_grid, "free_fluxes_grid.npy"),
     ):
         path = OUTPUT_FOLDER / filename
-        print(f"Writing {path}...")
         jnp.save(path, arr)
 
 
