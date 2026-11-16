@@ -101,7 +101,7 @@ def main():
         result = optimistix.minimise(
             loss,
             y0=jnp.log(INITIAL_GUESS),
-            args=(mst, jax.tree.map(lambda s: 1 / s, sd)),
+            args=(mst, jax.tree.map(lambda s: 1 / s**2, sd)),
             solver=solver,
             max_steps=10000,
             throw=False,

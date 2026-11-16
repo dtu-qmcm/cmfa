@@ -122,7 +122,7 @@ def main():
         result = optimistix.minimise(
             loss,
             y0=jnp.log(INITIAL_GUESS),
-            args=(mst, 1 / sd),
+            args=(mst, 1 / sd**2),
             solver=solver,
             max_steps=10000,
             throw=False,

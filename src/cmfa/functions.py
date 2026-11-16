@@ -180,9 +180,9 @@ def profile_likelihood(
 
     # Setup weights
     if use_jax_weights:
-        weights = jax.tree.map(lambda s: 1 / s, data_sd)
+        weights = jax.tree.map(lambda s: 1 / s**2, data_sd)
     else:
-        weights = 1 / data_sd
+        weights = 1 / data_sd**2
 
     # pyPESTO objective
     def my_loss_function(x):
