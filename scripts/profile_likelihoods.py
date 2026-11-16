@@ -51,8 +51,8 @@ random_sim_toy = simulated_mid_toy[random_idx_toy]
 sd_trad_toy = np.std(simulated_mid_toy, axis=0)
 sd_ilr_toy = np.std(ordered_ilr_func(simulated_mid_toy), axis=0)
 
-weights_trad_toy = 1/sd_trad_toy
-weights_ilr_toy = 1/sd_ilr_toy
+weights_trad_toy = 1/sd_trad_toy**2
+weights_ilr_toy = 1/sd_ilr_toy**2
 
 # 2. Optimization with Optimistix
 init_guess_toy = jnp.array([100.0, 50.0])
@@ -107,8 +107,8 @@ random_sim_tca = jax.tree.map(lambda x: x[random_idx_tca], simulated_mid_tca)
 sd_trad_tca = jax.tree.map(lambda x: np.std(x, axis=0), simulated_mid_tca)
 sd_ilr_tca = jax.tree.map(lambda x: np.std(ordered_ilr_func(x), axis=0), simulated_mid_tca)
 
-weights_trad_tca = jax.tree.map(lambda s: 1/s, sd_trad_tca)
-weights_ilr_tca = jax.tree.map(lambda s: 1/s, sd_ilr_tca)
+weights_trad_tca = jax.tree.map(lambda s: 1/s**2, sd_trad_tca)
+weights_ilr_tca = jax.tree.map(lambda s: 1/s**2, sd_ilr_tca)
 
 init_guess_tca = np.array([0.2, 0.2, 0.2])
 solver = optimistix.BFGS(rtol=1e-8, atol=1e-8)
